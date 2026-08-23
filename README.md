@@ -1,42 +1,66 @@
 # Smart Graffiti Management — Project Scaffold
 
-This is a **starting-point scaffold**, not a finished product. It gives you working
-folder structure, wiring, and example code so your team can build the actual
-CSG3101 project on top of it, rather than starting from a blank folder.
+This is a basic starting point for our CSG3101 Smart Graffiti project. It gives us the main folders and some example code so we don't have to start everything from zero.
 
-Nothing here is "done" — models aren't trained, screens aren't styled, and the API
-has no real business logic yet. Treat every file as a template to extend.
+It is **not a finished project yet**. The AI model is not trained, the app design is not finished, and the backend still needs the actual project logic.
 
-## Structure
+## Project Structure
 
-```
+```text
 smart-graffiti-scaffold/
-├── mobile_app/       Flutter app skeleton (capture + submit + view reports)
-├── backend/          FastAPI backend skeleton (API, DB models, routers)
-├── database/         PostgreSQL schema (reports, users, classifications)
-└── ml_pipeline/       Model training pipeline skeleton (data prep, train, eval)
+├── mobile_app/       Flutter mobile app
+├── backend/          FastAPI backend
+├── database/         PostgreSQL database
+└── ml_pipeline/      Machine learning files
 ```
 
-## Suggested order of attack
+## Recommended Order
 
-1. **database/schema.sql** — agree on this first as a team; everything else depends on it.
-2. **backend** — stand up the API skeleton against the schema (`/reports` endpoints work
-   with dummy data before any AI model exists).
-3. **mobile_app** — build the capture/submit screens against the backend's dummy endpoints.
-4. **ml_pipeline** — train a real detection model once you have a labelled dataset, then
-   swap it in behind `backend/app/services/classification_service.py`.
+1. **Database** — Set up the database structure first.
+2. **Backend** — Set up the API and test it with some dummy data.
+3. **Mobile App** — Build the screens for taking and submitting graffiti reports.
+4. **ML Pipeline** — Train the AI model once we have enough labelled images.
 
-## What's intentionally NOT included
+## What Is Not Included Yet
 
-- A trained model (you need to source/label graffiti image data yourselves — note the
-  ethics-clearance requirement in your project brief if you collect data from people)
-- Authentication / production security hardening
-- Deployment config (Docker, CI/CD) — add once the team has picked a hosting target
-- Real map/GIS integration (placeholder API call only)
+* Trained AI model
+* User login and security
+* Deployment setup
+* Real map/GPS integration
+* Final app design
 
-## Getting each part running
+These parts can be added as the project develops.
 
-- **Backend**: `cd backend && pip install -r requirements.txt --break-system-packages && uvicorn app.main:app --reload`
-- **Database**: `psql -f database/schema.sql` against a local Postgres instance
-- **Mobile app**: needs Flutter SDK installed locally — `flutter pub get && flutter run`
-- **ML pipeline**: `cd ml_pipeline && pip install -r requirements.txt --break-system-packages`
+## How to Run Each Part
+
+**Backend:**
+
+```bash
+cd backend
+pip install -r requirements.txt --break-system-packages
+uvicorn app.main:app --reload
+```
+
+**Database:**
+
+```bash
+psql -f database/schema.sql
+```
+
+**Mobile App:**
+
+```bash
+flutter pub get
+flutter run
+```
+
+**ML Pipeline:**
+
+```bash
+cd ml_pipeline
+pip install -r requirements.txt --break-system-packages
+```
+
+This scaffold is just the base of the project. We can build and improve each part as the project progresses. 
+
+Note: This is just the initial setup for our project. Some parts are still basic and will need to be changed or improved as we work on the project. The main purpose of this scaffold is to give us a starting point and keep the project organised.
