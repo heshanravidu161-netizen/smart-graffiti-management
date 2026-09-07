@@ -14,6 +14,11 @@ class ReportCreate(BaseModel):
     longitude: float
     notes: Optional[str] = None
 
+    submitted_by_uuid: Optional[str] = None
+    reporter_name: Optional[str] = None
+    reporter_email: Optional[str] = None
+    reporter_phone: Optional[str] = None
+
 
 class ReportOut(BaseModel):
     id: int
@@ -24,6 +29,11 @@ class ReportOut(BaseModel):
     submitted_at: datetime
     notes: Optional[str] = None
 
+    submitted_by_uuid: Optional[str] = None
+    reporter_name: Optional[str] = None
+    reporter_email: Optional[str] = None
+    reporter_phone: Optional[str] = None
+
 
 class ClassificationOut(BaseModel):
     id: int
@@ -33,3 +43,20 @@ class ClassificationOut(BaseModel):
     detection_confidence: Optional[float]
     harm_score: Optional[int]
     model_version: Optional[str]
+
+class UserSignup(BaseModel):
+    email: str
+    password: str
+    display_name: Optional[str] = None
+
+
+class UserLogin(BaseModel):
+    email: str
+    password: str
+
+
+class TokenResponse(BaseModel):
+    access_token: str
+    token_type: str = "bearer"
+    user_id: int
+    email: str

@@ -3,3 +3,5 @@ backend/.env
 __pycache__/
 *.pyc
 .DS_Store
+mobile_app/build/
+mobile_app/.dart_tool/

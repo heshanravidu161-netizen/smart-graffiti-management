@@ -6,9 +6,11 @@ schema.sql (source of truth for the actual database) AND this file (how
 Python code talks to it) — they need to stay in sync manually.
 """
 
+from sqlalchemy.dialects.postgresql import UUID
 from sqlalchemy import Column, Integer, String, Float, Text, TIMESTAMP, ForeignKey
 from sqlalchemy.sql import func
 from app.database import Base
+
 
 
 class User(Base):
@@ -16,6 +18,7 @@ class User(Base):
 
     id = Column(Integer, primary_key=True, index=True)
     email = Column(String(255), unique=True, nullable=False)
+    password_hash = Column(String(255), nullable=False)
     display_name = Column(String(100))
     role = Column(String(20), nullable=False, default="citizen")
     created_at = Column(TIMESTAMP, server_default=func.now())
@@ -24,13 +27,64 @@ class User(Base):
 class Report(Base):
     __tablename__ = "reports"
 
-    id = Column(Integer, primary_key=True, index=True)
-    submitted_by = Column(Integer, ForeignKey("users.id"))
-    image_url = Column(Text, nullable=False)
-    latitude = Column(Float, nullable=False)
-    longitude = Column(Float, nullable=False)
-    status = Column(String(20), nullable=False, default="new")
-    submitted_at = Column(TIMESTAMP, server_default=func.now())
+    id = Column(
+        Integer,
+        primary_key=True,
+        index=True,
+    )
+
+    submitted_by = Column(
+        Integer,
+        ForeignKey("users.id"),
+        nullable=True,
+    )
+
+    submitted_by_uuid = Column(
+        UUID(as_uuid=False),
+        nullable=True,
+    )
+
+    reporter_name = Column(
+        String(100),
+        nullable=True,
+    )
+
+    reporter_email = Column(
+        String(255),
+        nullable=True,
+    )
+
+    reporter_phone = Column(
+        String(30),
+        nullable=True,
+    )
+
+    image_url = Column(
+        Text,
+        nullable=False,
+    )
+
+    latitude = Column(
+        Float,
+        nullable=False,
+    )
+
+    longitude = Column(
+        Float,
+        nullable=False,
+    )
+
+    status = Column(
+        String(20),
+        nullable=False,
+        default="new",
+    )
+
+    submitted_at = Column(
+        TIMESTAMP,
+        server_default=func.now(),
+    )
+
     notes = Column(Text)
 
 

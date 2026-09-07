@@ -7,6 +7,10 @@ class Report {
   final double longitude;
   final String status;
   final String? notes;
+  final String? submittedByUuid;
+  final String? reporterName;
+  final String? reporterEmail;
+  final String? reporterPhone;
 
   Report({
     required this.id,
@@ -15,9 +19,15 @@ class Report {
     required this.longitude,
     required this.status,
     this.notes,
+    this.submittedByUuid,
+    this.reporterName,
+    this.reporterEmail,
+    this.reporterPhone,
   });
 
-  factory Report.fromJson(Map<String, dynamic> json) {
+  factory Report.fromJson(
+    Map<String, dynamic> json,
+  ) {
     return Report(
       id: json['id'],
       imageUrl: json['image_url'],
@@ -25,6 +35,10 @@ class Report {
       longitude: (json['longitude'] as num).toDouble(),
       status: json['status'],
       notes: json['notes'],
+      submittedByUuid: json['submitted_by_uuid']?.toString(),
+      reporterName: json['reporter_name']?.toString(),
+      reporterEmail: json['reporter_email']?.toString(),
+      reporterPhone: json['reporter_phone']?.toString(),
     );
   }
 }

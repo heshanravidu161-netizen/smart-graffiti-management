@@ -14,6 +14,8 @@ from fastapi.middleware.cors import CORSMiddleware
 from app.routers import reports, classifications
 from app.database import Base, engine
 from app.models import db_models  # noqa: F401
+from app.routers import auth
+
 
 app = FastAPI(
     title="Smart Graffiti Management API",
@@ -31,6 +33,8 @@ app.add_middleware(
     allow_methods=["*"],
     allow_headers=["*"],
 )
+
+app.include_router(auth.router, prefix="/auth", tags=["auth"])
 
 app.include_router(reports.router, prefix="/reports", tags=["reports"])
 app.include_router(classifications.router, prefix="/classifications", tags=["classifications"])
