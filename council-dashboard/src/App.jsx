@@ -22,7 +22,8 @@ import {
 import "leaflet/dist/leaflet.css";
 import "./App.css";
 
-const API_BASE = "http://localhost:8000";
+const API_BASE =
+  import.meta.env.VITE_API_URL || "https://urbaneyes-backend.onrender.com";
 const DEFAULT_CENTER = [-31.9523, 115.8613];
 
 const STATUS_INFORMATION = {
