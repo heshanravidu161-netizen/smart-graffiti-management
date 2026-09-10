@@ -28,7 +28,7 @@ class _SubmitReportScreenState extends State<SubmitReportScreen> {
   bool _submitting = false;
   bool _isConfirmed = false;
 
-  static const Color _purpleAccent = Color(0xFF6C5CE7);
+  static const Color _purpleAccent = Color(0xFFA855F7);
 
   @override
   void dispose() {
@@ -282,16 +282,16 @@ class _SubmitReportScreenState extends State<SubmitReportScreen> {
                 stackTrace,
               ) {
                 return Container(
-                  color: const Color(0xFFF3F2F8),
+                  color: const Color(0xFF050505),
                 );
               },
             ),
           ),
 
-          // Light background overlay
+          // Dark overlay keeps the map texture subtle and readable.
           Positioned.fill(
             child: Container(
-              color: const Color(0xFFF3F2F8).withValues(alpha: 0.82),
+              color: const Color(0xFF050505).withValues(alpha: 0.93),
             ),
           ),
 
@@ -309,7 +309,7 @@ class _SubmitReportScreenState extends State<SubmitReportScreen> {
                       IconButton(
                         icon: const Icon(
                           Icons.arrow_back,
-                          color: Color(0xFF2D2D2D),
+                          color: Colors.white,
                         ),
                         onPressed: () {
                           Navigator.maybePop(
@@ -325,7 +325,7 @@ class _SubmitReportScreenState extends State<SubmitReportScreen> {
                               style: TextStyle(
                                 fontWeight: FontWeight.bold,
                                 fontSize: 20,
-                                color: Color(0xFF1E1E24),
+                                color: Colors.white,
                               ),
                             ),
                             SizedBox(height: 2),
@@ -336,7 +336,7 @@ class _SubmitReportScreenState extends State<SubmitReportScreen> {
                               style: TextStyle(
                                 fontSize: 14,
                                 fontWeight: FontWeight.w500,
-                                color: Color(0xFF8E8EA0),
+                                color: Color(0xFF8E8E95),
                               ),
                             ),
                           ],
@@ -605,9 +605,7 @@ class _SubmitReportScreenState extends State<SubmitReportScreen> {
                           style: ElevatedButton.styleFrom(
                             backgroundColor: _canSubmit
                                 ? _purpleAccent
-                                : const Color(
-                                    0xFFD3D1E8,
-                                  ),
+                                : const Color(0xFF25252A),
                             elevation: _canSubmit ? 6 : 0,
                             shadowColor: _purpleAccent.withValues(
                               alpha: 0.4,
@@ -669,7 +667,7 @@ class _SubmitReportScreenState extends State<SubmitReportScreen> {
   }
 }
 
-// Reusable purple card
+// Reusable dark card with a subtle purple glow.
 class _PurpleCard extends StatelessWidget {
   final String title;
   final IconData icon;
@@ -688,16 +686,17 @@ class _PurpleCard extends StatelessWidget {
       decoration: BoxDecoration(
         gradient: const LinearGradient(
           colors: [
-            Color(0xFF6B42F2),
-            Color(0xFF8A51F7),
+            Color(0xFF19151F),
+            Color(0xFF111114),
           ],
           begin: Alignment.topLeft,
           end: Alignment.bottomRight,
         ),
         borderRadius: BorderRadius.circular(24),
+        border: Border.all(color: const Color(0xFF372447)),
         boxShadow: [
           BoxShadow(
-            color: const Color(0xFF6B42F2).withValues(alpha: 0.35),
+            color: const Color(0xFFA855F7).withValues(alpha: 0.14),
             blurRadius: 18,
             offset: const Offset(0, 8),
           ),
@@ -757,7 +756,7 @@ class _CapturedPhotoBadge extends StatelessWidget {
       width: double.infinity,
       padding: const EdgeInsets.all(10),
       decoration: BoxDecoration(
-        color: Colors.white.withValues(alpha: 0.2),
+        color: Colors.white.withValues(alpha: 0.08),
         borderRadius: BorderRadius.circular(16),
       ),
       child: Row(
@@ -835,7 +834,7 @@ class _EmptyPhotoPlaceholder extends StatelessWidget {
       height: 90,
       width: double.infinity,
       decoration: BoxDecoration(
-        color: Colors.white.withValues(alpha: 0.15),
+        color: Colors.white.withValues(alpha: 0.07),
         borderRadius: BorderRadius.circular(16),
       ),
       child: Column(
@@ -879,7 +878,7 @@ class _LocationButton extends StatelessWidget {
       child: TextButton.icon(
         style: TextButton.styleFrom(
           backgroundColor: Colors.white.withValues(
-            alpha: 0.18,
+            alpha: 0.08,
           ),
           shape: RoundedRectangleBorder(
             borderRadius: BorderRadius.circular(14),

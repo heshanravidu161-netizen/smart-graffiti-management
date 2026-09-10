@@ -3,8 +3,8 @@ import 'package:flutter/services.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
 import 'home_screen.dart';
 
-const Color _purple = Color(0xFF6C20E8);
-const Color _darkPurple = Color(0xFF3D00D9);
+const Color _purple = Color(0xFFA855F7);
+const Color _darkPurple = Color(0xFF5B21B6);
 
 class SignUpScreen extends StatefulWidget {
   const SignUpScreen({super.key});
@@ -215,7 +215,8 @@ class _SignUpScreenState extends State<SignUpScreen> {
     String text,
     bool requirementMet,
   ) {
-    final colour = requirementMet ? Colors.green : const Color(0xFF888888);
+    final colour =
+        requirementMet ? const Color(0xFF4ADE80) : const Color(0xFF777780);
 
     return Padding(
       padding: const EdgeInsets.symmetric(vertical: 3),
@@ -251,10 +252,10 @@ class _SignUpScreenState extends State<SignUpScreen> {
       hintText: hint,
       counterText: '',
       labelStyle: const TextStyle(
-        color: Color(0xFF888888),
+        color: Color(0xFF8E8E95),
       ),
       hintStyle: const TextStyle(
-        color: Color(0xFFAAAAAA),
+        color: Color(0xFF66666F),
       ),
       prefixIcon: Icon(
         icon,
@@ -262,7 +263,7 @@ class _SignUpScreenState extends State<SignUpScreen> {
       ),
       suffixIcon: suffix,
       filled: true,
-      fillColor: Colors.white,
+      fillColor: const Color(0xFF121212),
       contentPadding: const EdgeInsets.symmetric(
         horizontal: 20,
         vertical: 18,
@@ -290,7 +291,7 @@ class _SignUpScreenState extends State<SignUpScreen> {
   }) {
     return Container(
       decoration: BoxDecoration(
-        color: Colors.white,
+        color: const Color(0xFF121212),
         borderRadius: BorderRadius.circular(30),
         boxShadow: [
           BoxShadow(
@@ -317,13 +318,13 @@ class _SignUpScreenState extends State<SignUpScreen> {
   @override
   Widget build(BuildContext context) {
     return Scaffold(
-      backgroundColor: const Color(0xFFF4F3FA),
+      backgroundColor: const Color(0xFF050505),
       body: Stack(
         children: [
           // Main light background.
           const Positioned.fill(
             child: ColoredBox(
-              color: Color(0xFFF4F3FA),
+              color: Color(0xFF050505),
             ),
           ),
 
@@ -388,7 +389,7 @@ class _SignUpScreenState extends State<SignUpScreen> {
                         width: 76,
                         height: 76,
                         decoration: BoxDecoration(
-                          color: Colors.white,
+                          color: Color(0xFF151515),
                           shape: BoxShape.circle,
                           boxShadow: [
                             BoxShadow(
@@ -412,7 +413,7 @@ class _SignUpScreenState extends State<SignUpScreen> {
                       const Text(
                         'Create Account',
                         style: TextStyle(
-                          color: Color(0xFF171717),
+                          color: Colors.white,
                           fontSize: 32,
                           fontWeight: FontWeight.bold,
                         ),
@@ -424,7 +425,7 @@ class _SignUpScreenState extends State<SignUpScreen> {
                         'Join UrbanEyes and help improve your community',
                         textAlign: TextAlign.center,
                         style: TextStyle(
-                          color: Color(0xFF777777),
+                          color: Color(0xFF8E8E95),
                           fontSize: 14,
                         ),
                       ),
@@ -439,7 +440,7 @@ class _SignUpScreenState extends State<SignUpScreen> {
                           textInputAction: TextInputAction.next,
                           textCapitalization: TextCapitalization.words,
                           style: const TextStyle(
-                            color: Color(0xFF222222),
+                            color: Colors.white,
                           ),
                           decoration: _fieldDecoration(
                             label: 'Full name',
@@ -458,7 +459,7 @@ class _SignUpScreenState extends State<SignUpScreen> {
                           textInputAction: TextInputAction.next,
                           autocorrect: false,
                           style: const TextStyle(
-                            color: Color(0xFF222222),
+                            color: Colors.white,
                           ),
                           decoration: _fieldDecoration(
                             label: 'E-mail',
@@ -482,7 +483,7 @@ class _SignUpScreenState extends State<SignUpScreen> {
                             ),
                           ],
                           style: const TextStyle(
-                            color: Color(0xFF222222),
+                            color: Colors.white,
                           ),
                           decoration: _fieldDecoration(
                             label: 'Australian mobile number',
@@ -504,7 +505,7 @@ class _SignUpScreenState extends State<SignUpScreen> {
                             setState(() {});
                           },
                           style: const TextStyle(
-                            color: Color(0xFF222222),
+                            color: Colors.white,
                           ),
                           decoration: _fieldDecoration(
                             label: 'Password',
@@ -533,7 +534,7 @@ class _SignUpScreenState extends State<SignUpScreen> {
                         width: double.infinity,
                         padding: const EdgeInsets.all(16),
                         decoration: BoxDecoration(
-                          color: Colors.white,
+                          color: Color(0xFF121212),
                           borderRadius: BorderRadius.circular(18),
                           boxShadow: [
                             BoxShadow(
@@ -549,7 +550,7 @@ class _SignUpScreenState extends State<SignUpScreen> {
                             const Text(
                               'Your password must contain:',
                               style: TextStyle(
-                                color: Color(0xFF333333),
+                                color: Colors.white,
                                 fontWeight: FontWeight.bold,
                                 fontSize: 13,
                               ),
@@ -593,7 +594,7 @@ class _SignUpScreenState extends State<SignUpScreen> {
                             }
                           },
                           style: const TextStyle(
-                            color: Color(0xFF222222),
+                            color: Colors.white,
                           ),
                           decoration: _fieldDecoration(
                             label: 'Confirm password',

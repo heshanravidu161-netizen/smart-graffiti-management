@@ -16,10 +16,8 @@ class _LoginScreenState extends State<LoginScreen> {
 
   bool _isLoading = false;
   bool _hidePassword = true;
-  bool _rememberMe = false;
 
-  static const Color purple = Color(0xFF6C20E8);
-  static const Color darkPurple = Color(0xFF3D00D9);
+  static const Color purple = Color(0xFFA855F7);
 
   bool _validateLogin() {
     final email = _emailController.text.trim();
@@ -158,223 +156,125 @@ class _LoginScreenState extends State<LoginScreen> {
   @override
   Widget build(BuildContext context) {
     return Scaffold(
-      backgroundColor: const Color(0xFFF4F3FA),
-      body: Stack(
-        children: [
-          const Positioned.fill(
-            child: ColoredBox(
-              color: Color(0xFFF4F3FA),
-            ),
-          ),
-          Positioned(
-            top: 0,
-            left: 0,
-            right: 0,
-            child: ClipPath(
-              clipper: _TopWaveClipper(),
-              child: Container(
-                height: 230,
-                decoration: const BoxDecoration(
-                  gradient: LinearGradient(
-                    colors: [
-                      darkPurple,
-                      Color(0xFF9B20F5),
-                    ],
-                    begin: Alignment.topLeft,
-                    end: Alignment.bottomRight,
-                  ),
-                ),
-              ),
-            ),
-          ),
-          Positioned(
-            left: 0,
-            right: 0,
-            bottom: 0,
-            child: ClipPath(
-              clipper: _BottomWaveClipper(),
-              child: Container(
-                height: 180,
-                decoration: const BoxDecoration(
-                  gradient: LinearGradient(
-                    colors: [
-                      Color(0xFF9B20F5),
-                      darkPurple,
-                    ],
-                    begin: Alignment.topLeft,
-                    end: Alignment.bottomRight,
-                  ),
-                ),
-              ),
-            ),
-          ),
-          SafeArea(
-            child: Center(
-              child: SingleChildScrollView(
-                padding: const EdgeInsets.symmetric(
-                  horizontal: 30,
-                  vertical: 25,
-                ),
-                child: ConstrainedBox(
-                  constraints: const BoxConstraints(maxWidth: 430),
-                  child: Column(
-                    mainAxisAlignment: MainAxisAlignment.center,
-                    children: [
-                      Container(
-                        width: 82,
-                        height: 82,
-                        decoration: BoxDecoration(
-                          color: Colors.white,
-                          shape: BoxShape.circle,
-                          boxShadow: [
-                            BoxShadow(
-                              color: Colors.black.withValues(alpha: 0.18),
-                              blurRadius: 18,
-                              offset: const Offset(0, 7),
-                            ),
+      backgroundColor: const Color(0xFF050505),
+      body: SafeArea(
+        child: Center(
+          child: SingleChildScrollView(
+            padding: const EdgeInsets.symmetric(horizontal: 26, vertical: 32),
+            child: ConstrainedBox(
+              constraints: const BoxConstraints(maxWidth: 420),
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.stretch,
+                children: [
+                  Align(
+                    alignment: Alignment.centerLeft,
+                    child: Container(
+                      width: 54,
+                      height: 54,
+                      decoration: BoxDecoration(
+                        gradient: const LinearGradient(
+                          colors: [
+                            Color(0xFFFF8FCB),
+                            purple,
+                            Color(0xFF38BDF8)
                           ],
                         ),
-                        child: const Icon(
-                          Icons.remove_red_eye_rounded,
-                          color: purple,
-                          size: 50,
-                        ),
+                        borderRadius: BorderRadius.circular(17),
                       ),
-                      const SizedBox(height: 24),
-                      const Text(
-                        'Welcome Back!',
-                        style: TextStyle(
-                          color: Color(0xFF171717),
-                          fontSize: 34,
-                          fontWeight: FontWeight.bold,
-                        ),
+                      child: const Icon(
+                        Icons.remove_red_eye_rounded,
+                        color: Colors.white,
+                        size: 29,
                       ),
-                      const SizedBox(height: 6),
-                      const Text(
-                        'Sign in to your UrbanEyes account',
-                        style: TextStyle(
-                          color: Color(0xFF777777),
-                          fontSize: 15,
-                        ),
+                    ),
+                  ),
+                  const SizedBox(height: 28),
+                  const Text(
+                    'Welcome back',
+                    style: TextStyle(
+                      color: Colors.white,
+                      fontSize: 30,
+                      fontWeight: FontWeight.w700,
+                      letterSpacing: -0.5,
+                    ),
+                  ),
+                  const SizedBox(height: 8),
+                  const Text(
+                    'Sign in to continue to UrbanEyes.',
+                    style: TextStyle(color: Color(0xFF8E8E95), fontSize: 14),
+                  ),
+                  const SizedBox(height: 34),
+                  _LoginTextField(
+                    controller: _emailController,
+                    label: 'Email address',
+                    icon: Icons.email_outlined,
+                    keyboardType: TextInputType.emailAddress,
+                  ),
+                  const SizedBox(height: 14),
+                  _LoginTextField(
+                    controller: _passwordController,
+                    label: 'Password',
+                    icon: Icons.lock_outline_rounded,
+                    obscureText: _hidePassword,
+                    suffixIcon: IconButton(
+                      onPressed: () {
+                        setState(() {
+                          _hidePassword = !_hidePassword;
+                        });
+                      },
+                      icon: Icon(
+                        _hidePassword
+                            ? Icons.visibility_outlined
+                            : Icons.visibility_off_outlined,
+                        color: const Color(0xFF8E8E95),
                       ),
-                      const SizedBox(height: 38),
-                      _LoginTextField(
-                        controller: _emailController,
-                        label: 'E-mail',
-                        icon: Icons.email_rounded,
-                        keyboardType: TextInputType.emailAddress,
+                    ),
+                    onSubmitted: (_) {
+                      if (!_isLoading) _login();
+                    },
+                  ),
+                  Align(
+                    alignment: Alignment.centerRight,
+                    child: TextButton(
+                      onPressed: _isLoading ? null : _forgotPassword,
+                      child: const Text(
+                        'Forgot password?',
+                        style: TextStyle(color: purple, fontSize: 13),
                       ),
-                      const SizedBox(height: 20),
-                      _LoginTextField(
-                        controller: _passwordController,
-                        label: 'Password',
-                        icon: Icons.lock_rounded,
-                        obscureText: _hidePassword,
-                        suffixIcon: IconButton(
-                          onPressed: () {
-                            setState(() {
-                              _hidePassword = !_hidePassword;
-                            });
-                          },
-                          icon: Icon(
-                            _hidePassword
-                                ? Icons.visibility_outlined
-                                : Icons.visibility_off_outlined,
-                            color: purple,
-                          ),
-                        ),
-                        onSubmitted: (_) {
-                          if (!_isLoading) {
-                            _login();
-                          }
-                        },
-                      ),
-                      const SizedBox(height: 10),
-                      Row(
-                        children: [
-                          SizedBox(
-                            width: 24,
-                            height: 24,
-                            child: Checkbox(
-                              value: _rememberMe,
-                              activeColor: purple,
-                              side: const BorderSide(color: purple),
-                              onChanged: (value) {
-                                setState(() {
-                                  _rememberMe = value ?? false;
-                                });
-                              },
-                            ),
-                          ),
-                          const SizedBox(width: 7),
-                          const Text(
-                            'Remember me',
-                            style: TextStyle(
-                              color: Color(0xFF777777),
-                              fontSize: 12,
-                            ),
-                          ),
-                          const Spacer(),
-                          TextButton(
-                            onPressed: _isLoading ? null : _forgotPassword,
-                            child: const Text(
-                              'Forgot password?',
-                              style: TextStyle(
-                                color: purple,
-                                fontSize: 12,
-                              ),
-                            ),
-                          ),
-                        ],
-                      ),
-                      const SizedBox(height: 15),
-                      _GradientButton(
-                        text: 'SIGN IN',
-                        isLoading: _isLoading,
-                        onPressed: _login,
-                      ),
-                      const SizedBox(height: 18),
+                    ),
+                  ),
+                  const SizedBox(height: 8),
+                  _GradientButton(
+                    text: 'Sign in',
+                    isLoading: _isLoading,
+                    onPressed: _login,
+                  ),
+                  const SizedBox(height: 24),
+                  Row(
+                    mainAxisAlignment: MainAxisAlignment.center,
+                    children: [
                       const Text(
                         "Don't have an account?",
-                        style: TextStyle(
-                          color: Color(0xFF777777),
-                          fontSize: 13,
-                        ),
+                        style:
+                            TextStyle(color: Color(0xFF8E8E95), fontSize: 13),
                       ),
-                      const SizedBox(height: 10),
-                      SizedBox(
-                        width: double.infinity,
-                        height: 52,
-                        child: OutlinedButton.icon(
-                          onPressed: _isLoading ? null : _openSignUpScreen,
-                          icon: const Icon(Icons.person_add_alt_1),
-                          label: const Text(
-                            'CREATE NEW ACCOUNT',
-                            style: TextStyle(
-                              fontWeight: FontWeight.bold,
-                            ),
-                          ),
-                          style: OutlinedButton.styleFrom(
-                            foregroundColor: purple,
-                            backgroundColor: Colors.white,
-                            side: const BorderSide(
-                              color: purple,
-                              width: 1.5,
-                            ),
-                            shape: RoundedRectangleBorder(
-                              borderRadius: BorderRadius.circular(26),
-                            ),
+                      TextButton(
+                        onPressed: _isLoading ? null : _openSignUpScreen,
+                        child: const Text(
+                          'Create account',
+                          style: TextStyle(
+                            color: purple,
+                            fontWeight: FontWeight.w700,
                           ),
                         ),
                       ),
-                      const SizedBox(height: 100),
                     ],
                   ),
-                ),
+                ],
               ),
             ),
           ),
-        ],
+        ),
       ),
     );
   }
@@ -403,15 +303,9 @@ class _LoginTextField extends StatelessWidget {
   Widget build(BuildContext context) {
     return Container(
       decoration: BoxDecoration(
-        color: Colors.white,
-        borderRadius: BorderRadius.circular(30),
-        boxShadow: [
-          BoxShadow(
-            color: const Color(0xFF6C20E8).withValues(alpha: 0.17),
-            blurRadius: 18,
-            offset: const Offset(0, 7),
-          ),
-        ],
+        color: const Color(0xFF121212),
+        borderRadius: BorderRadius.circular(16),
+        border: Border.all(color: Colors.white12),
       ),
       child: TextField(
         controller: controller,
@@ -421,30 +315,28 @@ class _LoginTextField extends StatelessWidget {
         autocorrect: false,
         textInputAction:
             obscureText ? TextInputAction.done : TextInputAction.next,
-        style: const TextStyle(color: Color(0xFF222222)),
+        style: const TextStyle(color: Colors.white),
         decoration: InputDecoration(
           labelText: label,
-          labelStyle: const TextStyle(color: Color(0xFF888888)),
-          prefixIcon: Icon(icon, color: const Color(0xFF6C20E8)),
+          labelStyle: const TextStyle(color: Color(0xFF8E8E95)),
+          prefixIcon: Icon(icon, color: const Color(0xFFA855F7)),
           suffixIcon: suffixIcon,
           filled: true,
-          fillColor: Colors.white,
-          contentPadding: const EdgeInsets.symmetric(
-            horizontal: 20,
-            vertical: 18,
-          ),
+          fillColor: const Color(0xFF121212),
+          contentPadding:
+              const EdgeInsets.symmetric(horizontal: 18, vertical: 17),
           border: OutlineInputBorder(
-            borderRadius: BorderRadius.circular(30),
+            borderRadius: BorderRadius.circular(16),
             borderSide: BorderSide.none,
           ),
           enabledBorder: OutlineInputBorder(
-            borderRadius: BorderRadius.circular(30),
+            borderRadius: BorderRadius.circular(16),
             borderSide: BorderSide.none,
           ),
           focusedBorder: OutlineInputBorder(
-            borderRadius: BorderRadius.circular(30),
+            borderRadius: BorderRadius.circular(16),
             borderSide: const BorderSide(
-              color: Color(0xFF6C20E8),
+              color: Color(0xFFA855F7),
               width: 1.5,
             ),
           ),
@@ -469,7 +361,7 @@ class _GradientButton extends StatelessWidget {
   Widget build(BuildContext context) {
     return Container(
       width: double.infinity,
-      height: 54,
+      height: 52,
       decoration: BoxDecoration(
         gradient: const LinearGradient(
           colors: [
@@ -477,7 +369,7 @@ class _GradientButton extends StatelessWidget {
             Color(0xFF3D00D9),
           ],
         ),
-        borderRadius: BorderRadius.circular(27),
+        borderRadius: BorderRadius.circular(16),
         boxShadow: [
           BoxShadow(
             color: const Color(0xFF6C20E8).withValues(alpha: 0.35),
@@ -494,7 +386,7 @@ class _GradientButton extends StatelessWidget {
           shadowColor: Colors.transparent,
           foregroundColor: Colors.white,
           shape: RoundedRectangleBorder(
-            borderRadius: BorderRadius.circular(27),
+            borderRadius: BorderRadius.circular(16),
           ),
         ),
         child: isLoading
@@ -510,81 +402,10 @@ class _GradientButton extends StatelessWidget {
                 text,
                 style: const TextStyle(
                   color: Colors.white,
-                  fontWeight: FontWeight.bold,
+                  fontWeight: FontWeight.w700,
                 ),
               ),
       ),
     );
   }
-}
-
-class _TopWaveClipper extends CustomClipper<Path> {
-  @override
-  Path getClip(Size size) {
-    final path = Path();
-
-    path.lineTo(0, 0);
-    path.lineTo(size.width, 0);
-    path.lineTo(size.width, size.height * 0.57);
-
-    path.cubicTo(
-      size.width * 0.82,
-      size.height * 0.80,
-      size.width * 0.68,
-      size.height * 0.48,
-      size.width * 0.52,
-      size.height * 0.69,
-    );
-
-    path.cubicTo(
-      size.width * 0.35,
-      size.height * 0.90,
-      size.width * 0.23,
-      size.height * 0.42,
-      0,
-      size.height * 0.65,
-    );
-
-    path.close();
-    return path;
-  }
-
-  @override
-  bool shouldReclip(CustomClipper<Path> oldClipper) => false;
-}
-
-class _BottomWaveClipper extends CustomClipper<Path> {
-  @override
-  Path getClip(Size size) {
-    final path = Path();
-
-    path.moveTo(0, size.height * 0.42);
-
-    path.cubicTo(
-      size.width * 0.20,
-      size.height * 0.15,
-      size.width * 0.35,
-      size.height * 0.70,
-      size.width * 0.52,
-      size.height * 0.38,
-    );
-
-    path.cubicTo(
-      size.width * 0.70,
-      size.height * 0.08,
-      size.width * 0.84,
-      size.height * 0.62,
-      size.width,
-      size.height * 0.30,
-    );
-
-    path.lineTo(size.width, size.height);
-    path.lineTo(0, size.height);
-    path.close();
-
-    return path;
-  }
-
-  @override
-  bool shouldReclip(CustomClipper<Path> oldClipper) => false;
 }
