@@ -1977,3 +1977,99 @@ body {
     border-radius: 0;
   }
 }
+
+.sidebar-account {
+  flex: 1;
+  padding: 28px 20px;
+}
+
+.sidebar-section-label {
+  margin: 0 0 14px;
+  color: #64748b;
+  font-size: 11px;
+  font-weight: 700;
+  letter-spacing: 0.14em;
+}
+
+.logged-in-user {
+  display: flex;
+  align-items: center;
+  gap: 13px;
+  padding: 16px;
+
+  border: 1px solid rgba(148, 163, 184, 0.16);
+  border-radius: 15px;
+
+  background: rgba(255, 255, 255, 0.04);
+}
+
+.logged-in-avatar {
+  width: 45px;
+  height: 45px;
+  flex-shrink: 0;
+
+  display: grid;
+  place-items: center;
+
+  color: white;
+  border-radius: 13px;
+
+  font-size: 18px;
+  font-weight: 800;
+
+  background: linear-gradient(
+    135deg,
+    #7c3aed,
+    #0ea5e9
+  );
+}
+
+.logged-in-details {
+  min-width: 0;
+  display: grid;
+  gap: 4px;
+}
+
+.logged-in-details strong {
+  color: #f8fafc;
+  font-size: 14px;
+}
+
+.logged-in-details span {
+  overflow: hidden;
+  color: #94a3b8;
+  font-size: 12px;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.logged-in-details small {
+  color: #22c55e;
+  font-size: 11px;
+}
+
+.sidebar-signout {
+  width: 100%;
+  min-height: 48px;
+
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 9px;
+
+  color: #fecaca;
+  border: 1px solid rgba(239, 68, 68, 0.3);
+  border-radius: 12px;
+
+  font-size: 14px;
+  font-weight: 700;
+
+  background: rgba(127, 29, 29, 0.18);
+  cursor: pointer;
+}
+
+.sidebar-signout:hover {
+  color: white;
+  border-color: #ef4444;
+  background: #dc2626;
+}

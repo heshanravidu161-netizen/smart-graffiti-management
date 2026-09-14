@@ -368,11 +368,13 @@ function CouncilDashboard({ session, onSignOut }) {
       >
         <div className="sidebar-header">
           <div className="brand">
-            <span className="brand-mark"></span>
+            <span className="brand-mark">
+              <span className="brand-mark">AU</span>
+            </span>
 
             <div className="brand-text">
-              <strong>UrbanEyes </strong>
-              <small>Council Portal</small>
+              <strong>UrbanEyes</strong>
+              <small>Council Administration Portal</small>
             </div>
           </div>
 
@@ -385,55 +387,38 @@ function CouncilDashboard({ session, onSignOut }) {
           </button>
         </div>
 
-        <nav className="sidebar-navigation">
-          <button
-            className="nav-item active"
-            onClick={() => setSidebarOpen(false)}
-          >
-            <span className="nav-icon">▦</span>
-            Overview
-          </button>
+        <div className="sidebar-account">
+          <p className="sidebar-section-label">
+            SIGNED IN AS
+          </p>
 
-          <button
-            className="nav-item"
-            onClick={() => setSidebarOpen(false)}
-          >
-            <span className="nav-icon">▤</span>
-            Reports
+          <div className="logged-in-user">
+            <div className="logged-in-avatar">
+              {session?.user?.email
+                ?.charAt(0)
+                .toUpperCase() || "C"}
+            </div>
 
-            <span className="nav-count">
-              {reportCounts.new}
-            </span>
-          </button>
+            <div className="logged-in-details">
+              <strong>
+                {session?.user?.user_metadata?.full_name ||
+                  session?.user?.user_metadata?.name ||
+                  "Council Staff"}
+              </strong>
 
-          <button
-            className="nav-item"
-            onClick={() => setSidebarOpen(false)}
-          >
-            <span className="nav-icon">♙</span>
-            User Management
+              <span>{session?.user?.email}</span>
 
-            <span className="soon-label">Soon</span>
-          </button>
-        </nav>
-
-        <div className="sidebar-bottom">
-          <button className="nav-item">
-            <span className="nav-icon">⚙</span>
-            Settings
-          </button>
-
-          <div className="council-user">
-            <div className="council-avatar">CS</div>
-
-            <div>
-              <strong>Council Staff</strong>
-              <small>Administrator</small>
+              <small>Authorised council user</small>
             </div>
           </div>
+        </div>
 
-          <button className="nav-item" onClick={onSignOut}>
-            <span className="nav-icon">↪</span>
+        <div className="sidebar-bottom">
+          <button
+            className="sidebar-signout"
+            onClick={onSignOut}
+          >
+            <span>↪</span>
             Sign out
           </button>
         </div>
