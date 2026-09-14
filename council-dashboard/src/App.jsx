@@ -1,4 +1,5 @@
 import { useEffect, useMemo, useState } from "react";
+import { createClient } from "@supabase/supabase-js";
 import {
   MapContainer,
   TileLayer,
@@ -21,9 +22,18 @@ import {
 
 import "leaflet/dist/leaflet.css";
 import "./App.css";
+import "./CouncilLogin.css";
+
+const SUPABASE_URL = import.meta.env.VITE_SUPABASE_URL;
+const SUPABASE_ANON_KEY = import.meta.env.VITE_SUPABASE_ANON_KEY;
+
+const supabase =
+  SUPABASE_URL && SUPABASE_ANON_KEY
+    ? createClient(SUPABASE_URL, SUPABASE_ANON_KEY)
+    : null;
 
 const API_BASE =
-  import.meta.env.VITE_API_URL || "https://urbaneyes-backend.onrender.com";
+  import.meta.env.VITE_API_URL || "http://localhost:8000";
 const DEFAULT_CENTER = [-31.9523, 115.8613];
 
 const STATUS_INFORMATION = {
@@ -59,7 +69,7 @@ function StatusBadge({ status }) {
   );
 }
 
-function App() {
+function CouncilDashboard({ session, onSignOut }) {
   const [reports, setReports] = useState([]);
   const [selectedReport, setSelectedReport] = useState(null);
 
@@ -87,7 +97,11 @@ function App() {
     setError(null);
 
     try {
-      const response = await fetch(`${API_BASE}/reports/`);
+      const response = await fetch(`${API_BASE}/reports/`, {
+        headers: {
+          Authorization: `Bearer ${session.access_token}`,
+        },
+      });
 
       if (!response.ok) {
         throw new Error(`Server returned ${response.status}`);
@@ -258,6 +272,9 @@ function App() {
         `${API_BASE}/reports/${reportId}/status?status=${newStatus}`,
         {
           method: "PATCH",
+          headers: {
+            Authorization: `Bearer ${session.access_token}`,
+          },
         },
       );
 
@@ -351,10 +368,10 @@ function App() {
       >
         <div className="sidebar-header">
           <div className="brand">
-            <span className="brand-mark">U</span>
+            <span className="brand-mark"></span>
 
             <div className="brand-text">
-              <strong>UrbanEyes</strong>
+              <strong>UrbanEyes </strong>
               <small>Council Portal</small>
             </div>
           </div>
@@ -414,6 +431,11 @@ function App() {
               <small>Administrator</small>
             </div>
           </div>
+
+          <button className="nav-item" onClick={onSignOut}>
+            <span className="nav-icon">↪</span>
+            Sign out
+          </button>
         </div>
       </aside>
 
@@ -1147,6 +1169,191 @@ function App() {
       )}
     </div>
   );
+}
+
+function CouncilLogin() {
+  const [session, setSession] = useState(null);
+  const [checkingSession, setCheckingSession] = useState(true);
+  const [email, setEmail] = useState("");
+  const [password, setPassword] = useState("");
+  const [showPassword, setShowPassword] = useState(false);
+  const [submitting, setSubmitting] = useState(false);
+  const [loginError, setLoginError] = useState("");
+
+  useEffect(() => {
+    supabase.auth.getSession().then(({ data }) => {
+      setSession(data.session);
+      setCheckingSession(false);
+    });
+
+    const { data: listener } = supabase.auth.onAuthStateChange(
+      (_event, nextSession) => {
+        setSession(nextSession);
+        setCheckingSession(false);
+      },
+    );
+
+    return () => listener.subscription.unsubscribe();
+  }, []);
+
+  const isCouncilUser =
+    session?.user?.app_metadata?.role === "council";
+
+  useEffect(() => {
+    if (session && !isCouncilUser) {
+      setLoginError(
+        "This account does not have permission to use the council portal.",
+      );
+      supabase.auth.signOut();
+    }
+  }, [session, isCouncilUser]);
+
+  async function handleLogin(event) {
+    event.preventDefault();
+    setSubmitting(true);
+    setLoginError("");
+
+    const { data, error } = await supabase.auth.signInWithPassword({
+      email: email.trim(),
+      password,
+    });
+
+    if (error) {
+      setLoginError("The email address or password is incorrect.");
+      setSubmitting(false);
+      return;
+    }
+
+    if (data.user?.app_metadata?.role !== "council") {
+      await supabase.auth.signOut();
+      setLoginError(
+        "This account does not have permission to use the council portal.",
+      );
+      setSubmitting(false);
+      return;
+    }
+
+    setSubmitting(false);
+  }
+
+  async function handleSignOut() {
+    await supabase.auth.signOut();
+    setEmail("");
+    setPassword("");
+  }
+
+  if (checkingSession) {
+    return (
+      <main className="login-page">
+        <div className="login-loader" aria-label="Checking session" />
+      </main>
+    );
+  }
+
+  if (session && isCouncilUser) {
+    return (
+      <CouncilDashboard
+        session={session}
+        onSignOut={handleSignOut}
+      />
+    );
+  }
+
+  return (
+    <main className="login-page">
+      <section className="login-card">
+        <div className="login-brand">
+          <span
+          className="login-brand-mark"
+          role="img"
+          aria-label="Australian flag"
+        >
+          🇦🇺
+        </span>
+
+          <div>
+            <strong>UrbanEyes</strong>
+            <small>🇦🇺 Be the reason Australia’s streets look better tomorrow</small>
+          </div>
+        </div>
+
+        <div className="login-heading">
+          <p>COUNCIL DASHBOARD</p>
+          <h1>Welcome back </h1>
+          <span>✅ Sign in to your account to continue.</span>
+        </div>
+
+        <form className="login-form" onSubmit={handleLogin}>
+          <label htmlFor="council-email">Email address</label>
+          <input
+            id="council-email"
+            type="email"
+            value={email}
+            onChange={(event) => setEmail(event.target.value)}
+            placeholder="Enter your email"
+            autoComplete="email"
+            required
+          />
+
+          <label htmlFor="council-password">Password</label>
+          <div className="password-field">
+            <input
+              id="council-password"
+              type={showPassword ? "text" : "password"}
+              value={password}
+              onChange={(event) => setPassword(event.target.value)}
+              placeholder="Enter your password"
+              autoComplete="current-password"
+              required
+            />
+
+            <button
+              type="button"
+              onClick={() => setShowPassword((current) => !current)}
+            >
+              {showPassword ? "Hide" : "Show"}
+            </button>
+          </div>
+
+          {loginError && (
+            <div className="login-error" role="alert">
+              {loginError}
+            </div>
+          )}
+
+          <button
+            className="login-submit"
+            type="submit"
+            disabled={submitting}
+          >
+            {submitting ? "Signing in..." : "Sign in to Dashboard"}
+          </button>
+        </form>
+
+        <p className="login-help">
+          Access is restricted to authorised council staff.
+        </p>
+      </section>
+    </main>
+  );
+}
+
+function App() {
+  if (!SUPABASE_URL || !SUPABASE_ANON_KEY) {
+    return (
+      <main className="login-page">
+        <section className="login-card">
+          <h1>Configuration required</h1>
+          <p className="login-error">
+            Add VITE_SUPABASE_URL and VITE_SUPABASE_ANON_KEY to
+            the dashboard environment variables.
+          </p>
+        </section>
+      </main>
+    );
+  }
+
+  return <CouncilLogin />;
 }
 
 export default App;
