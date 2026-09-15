@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
 import 'home_screen.dart';
 import 'sign_up_screen.dart';
+import 'submit_report_screen.dart';
 
 class LoginScreen extends StatefulWidget {
   const LoginScreen({super.key});
@@ -15,6 +16,7 @@ class _LoginScreenState extends State<LoginScreen> {
   final TextEditingController _passwordController = TextEditingController();
 
   bool _isLoading = false;
+  bool _isAnonymousLoading = false;
   bool _hidePassword = true;
 
   static const Color purple = Color(0xFFA855F7);
@@ -134,6 +136,51 @@ class _LoginScreenState extends State<LoginScreen> {
     );
   }
 
+  Future<void> _submitAnonymously() async {
+    if (_isLoading || _isAnonymousLoading) return;
+
+    setState(() {
+      _isAnonymousLoading = true;
+    });
+
+    var anonymousSessionCreated = false;
+
+    try {
+      await Supabase.instance.client.auth.signInAnonymously();
+      anonymousSessionCreated = true;
+
+      if (!mounted) return;
+
+      // Keep the login screen underneath the report screen. When the user
+      // leaves the report screen, the temporary anonymous session is removed.
+      await Navigator.push(
+        context,
+        MaterialPageRoute(
+          builder: (_) => const SubmitReportScreen(),
+        ),
+      );
+    } on AuthException catch (error) {
+      if (!mounted) return;
+      _showMessage(error.message, Colors.red);
+    } catch (_) {
+      if (!mounted) return;
+      _showMessage(
+        'Anonymous access could not be started. Please try again.',
+        Colors.red,
+      );
+    } finally {
+      if (anonymousSessionCreated) {
+        await Supabase.instance.client.auth.signOut();
+      }
+
+      if (mounted) {
+        setState(() {
+          _isAnonymousLoading = false;
+        });
+      }
+    }
+  }
+
   void _showMessage(String message, Color colour) {
     ScaffoldMessenger.of(context).hideCurrentSnackBar();
 
@@ -230,13 +277,15 @@ class _LoginScreenState extends State<LoginScreen> {
                       ),
                     ),
                     onSubmitted: (_) {
-                      if (!_isLoading) _login();
+                      if (!_isLoading && !_isAnonymousLoading) _login();
                     },
                   ),
                   Align(
                     alignment: Alignment.centerRight,
                     child: TextButton(
-                      onPressed: _isLoading ? null : _forgotPassword,
+                      onPressed: _isLoading || _isAnonymousLoading
+                          ? null
+                          : _forgotPassword,
                       child: const Text(
                         'Forgot password?',
                         style: TextStyle(color: purple, fontSize: 13),
@@ -246,29 +295,91 @@ class _LoginScreenState extends State<LoginScreen> {
                   const SizedBox(height: 8),
                   _GradientButton(
                     text: 'Sign in',
-                    isLoading: _isLoading,
+                    isLoading: _isLoading || _isAnonymousLoading,
                     onPressed: _login,
                   ),
-                  const SizedBox(height: 24),
+                  const SizedBox(height: 12),
+                  _GradientButton(
+                    text: 'Create account',
+                    isLoading: _isLoading || _isAnonymousLoading,
+                    onPressed: _openSignUpScreen,
+                  ),
+                  const SizedBox(height: 26),
+                  const Text(
+                    'Prefer not to create an account?',
+                    textAlign: TextAlign.center,
+                    style: TextStyle(
+                      color: Color(0xFF8E8E95),
+                      fontSize: 13,
+                    ),
+                  ),
+                  const SizedBox(height: 18),
                   Row(
-                    mainAxisAlignment: MainAxisAlignment.center,
                     children: [
-                      const Text(
-                        "Don't have an account?",
-                        style:
-                            TextStyle(color: Color(0xFF8E8E95), fontSize: 13),
+                      const Expanded(
+                        child: Divider(color: Colors.white12),
                       ),
-                      TextButton(
-                        onPressed: _isLoading ? null : _openSignUpScreen,
-                        child: const Text(
-                          'Create account',
+                      Padding(
+                        padding: const EdgeInsets.symmetric(horizontal: 12),
+                        child: Text(
+                          'OR',
                           style: TextStyle(
-                            color: purple,
+                            color: Colors.white.withValues(alpha: 0.45),
+                            fontSize: 11,
                             fontWeight: FontWeight.w700,
+                            letterSpacing: 1.4,
                           ),
                         ),
                       ),
+                      const Expanded(
+                        child: Divider(color: Colors.white12),
+                      ),
                     ],
+                  ),
+                  const SizedBox(height: 18),
+                  SizedBox(
+                    height: 52,
+                    child: OutlinedButton.icon(
+                      onPressed: _isLoading || _isAnonymousLoading
+                          ? null
+                          : _submitAnonymously,
+                      icon: _isAnonymousLoading
+                          ? const SizedBox(
+                              width: 19,
+                              height: 19,
+                              child: CircularProgressIndicator(
+                                strokeWidth: 2,
+                                color: Colors.white,
+                              ),
+                            )
+                          : const Icon(Icons.visibility_off_outlined),
+                      label: Text(
+                        _isAnonymousLoading
+                            ? 'Opening report form...'
+                            : 'Submit a report anonymously',
+                      ),
+                      style: OutlinedButton.styleFrom(
+                        foregroundColor: Colors.white,
+                        side: const BorderSide(
+                          color: Color(0xFFA855F7),
+                          width: 1.4,
+                        ),
+                        shape: RoundedRectangleBorder(
+                          borderRadius: BorderRadius.circular(16),
+                        ),
+                      ),
+                    ),
+                  ),
+                  const SizedBox(height: 10),
+                  const Text(
+                    'No email, phone number or password is required. '
+                    'Anonymous reports cannot be tracked under Your Reports.',
+                    textAlign: TextAlign.center,
+                    style: TextStyle(
+                      color: Color(0xFF777780),
+                      fontSize: 11,
+                      height: 1.4,
+                    ),
                   ),
                 ],
               ),
