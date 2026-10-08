@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { createClient } from "@supabase/supabase-js";
 import {
   MapContainer,
@@ -215,8 +215,12 @@ function CouncilDashboard({ session, onSignOut }) {
   const [updating, setUpdating] = useState(false);
 
   const [error, setError] = useState(null);
+  const [connectionWarning, setConnectionWarning] = useState("");
   const [message, setMessage] = useState("");
   const [lastUpdated, setLastUpdated] = useState(null);
+  const reportsRequestInProgress = useRef(false);
+  const retryTimeout = useRef(null);
+  const classificationsRef = useRef({});
   const [reviewForm, setReviewForm] = useState({
     surface_type: "unknown",
     tag_category: "unknown",
@@ -230,13 +234,17 @@ function CouncilDashboard({ session, onSignOut }) {
   const [reviewMessage, setReviewMessage] = useState("");
 
   async function fetchReports(quiet = false) {
+    if (reportsRequestInProgress.current) {
+      return;
+    }
+
+    reportsRequestInProgress.current = true;
+
     if (quiet) {
       setRefreshing(true);
     } else {
       setLoading(true);
     }
-
-    setError(null);
 
     try {
       const response = await fetch(`${API_BASE}/reports/`, {
@@ -251,49 +259,78 @@ function CouncilDashboard({ session, onSignOut }) {
 
       const data = await response.json();
       setReports(data);
+      setLoading(false);
       await fetchReportClassifications(data);
       setLastUpdated(new Date());
+      setError(null);
+      setConnectionWarning("");
+
+      if (retryTimeout.current) {
+        window.clearTimeout(retryTimeout.current);
+        retryTimeout.current = null;
+      }
     } catch (requestError) {
-      setError(requestError.message);
+      if (quiet || reports.length > 0) {
+        setConnectionWarning(
+          "The backend is busy processing AI results. Retrying automatically.",
+        );
+      } else {
+        setError(requestError.message);
+      }
+
+      if (!retryTimeout.current) {
+        retryTimeout.current = window.setTimeout(() => {
+          retryTimeout.current = null;
+          fetchReports(true);
+        }, 15000);
+      }
     } finally {
+      reportsRequestInProgress.current = false;
       setLoading(false);
       setRefreshing(false);
     }
   }
 
   async function fetchReportClassifications(reportList) {
-    const entries = await Promise.all(
-      reportList.map(async (report) => {
-        try {
-          const response = await fetch(
-            `${API_BASE}/classifications/${report.id}/latest`,
-            {
-              headers: {
-                Authorization: `Bearer ${session.access_token}`,
-              },
-            },
-          );
-
-          if (response.status === 404) {
-            return [report.id, null];
-          }
-
-          if (!response.ok) {
-            throw new Error(`Server returned ${response.status}`);
-          }
-
-          return [report.id, await response.json()];
-        } catch (requestError) {
-          console.error(
-            `Could not load classification for report ${report.id}:`,
-            requestError,
-          );
-          return [report.id, null];
-        }
-      }),
+    const existingClassifications = classificationsRef.current;
+    const pendingReports = reportList.filter(
+      (report) => !existingClassifications[report.id],
     );
+    const newEntries = {};
 
-    setClassificationsByReport(Object.fromEntries(entries));
+    for (const report of pendingReports) {
+      try {
+        const response = await fetch(
+          `${API_BASE}/classifications/${report.id}/latest`,
+          {
+            headers: {
+              Authorization: `Bearer ${session.access_token}`,
+            },
+          },
+        );
+
+        if (response.status === 404) {
+          newEntries[report.id] = null;
+          continue;
+        }
+
+        if (!response.ok) {
+          throw new Error(`Server returned ${response.status}`);
+        }
+
+        newEntries[report.id] = await response.json();
+      } catch (requestError) {
+        console.error(
+          `Could not load classification for report ${report.id}:`,
+          requestError,
+        );
+      }
+    }
+
+    setClassificationsByReport((current) => ({
+      ...current,
+      ...newEntries,
+    }));
   }
 
   async function fetchClassification(reportId) {
@@ -428,16 +465,24 @@ function CouncilDashboard({ session, onSignOut }) {
   }
 
   useEffect(() => {
+    classificationsRef.current = classificationsByReport;
+  }, [classificationsByReport]);
+
+  useEffect(() => {
     fetchReports();
 
     // Refresh the dashboard automatically so new reports and completed
     // AI classifications appear without a manual page refresh.
     const refreshInterval = window.setInterval(() => {
       fetchReports(true);
-    }, 10000);
+    }, 60000);
 
     return () => {
       window.clearInterval(refreshInterval);
+
+      if (retryTimeout.current) {
+        window.clearTimeout(retryTimeout.current);
+      }
     };
   }, []);
 
@@ -2986,15 +3031,15 @@ function CouncilDashboard({ session, onSignOut }) {
         </div>
       )}
 
-      {message && (
+      {(connectionWarning || message) && (
         <div
           className={`toast ${
-            message.startsWith("Update failed")
+            connectionWarning || message.startsWith("Update failed")
               ? "error"
               : ""
           }`}
         >
-          {message}
+          {connectionWarning || message}
         </div>
       )}
     </div>
