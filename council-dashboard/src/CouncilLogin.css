@@ -7,8 +7,8 @@
 
   background-image:
     linear-gradient(
-      rgba(3, 7, 18, 0.60),
-      rgba(15, 5, 40, 0.60)
+      rgba(3, 7, 18, 0.10),
+      rgba(15, 5, 40, 0.10)
     ),
     url("/council-login-background.png");
 

@@ -3,7 +3,7 @@ Pydantic request/response models. These mirror database/schema.sql — keep them
 in sync as the schema evolves.
 """
 
-from pydantic import BaseModel
+from pydantic import BaseModel, Field
 from typing import Optional
 from datetime import datetime
 
@@ -35,14 +35,47 @@ class ReportOut(BaseModel):
     reporter_phone: Optional[str] = None
 
 
+class ClassificationReviewUpdate(BaseModel):
+    """Corrections submitted by authorised council staff."""
+
+    surface_type: Optional[str] = None
+    tag_category: Optional[str] = None
+    location_type: Optional[str] = None
+    size_category: Optional[str] = None
+    reviewed_by: Optional[str] = None
+    review_notes: Optional[str] = None
+
+
 class ClassificationOut(BaseModel):
     id: int
     report_id: int
-    surface_type: Optional[str]
-    tag_category: Optional[str]
-    detection_confidence: Optional[float]
-    harm_score: Optional[int]
-    model_version: Optional[str]
+
+    graffiti_detected: bool = False
+    surface_type: Optional[str] = None
+    tag_category: Optional[str] = None
+    location_type: Optional[str] = None
+    size_category: Optional[str] = None
+
+    ai_surface_type: Optional[str] = None
+    ai_tag_category: Optional[str] = None
+    ai_location_type: Optional[str] = None
+    ai_size_category: Optional[str] = None
+
+    detection_confidence: Optional[float] = None
+    manual_review_required: bool = True
+    manually_reviewed: bool = False
+    reviewed_by: Optional[str] = None
+    reviewed_at: Optional[datetime] = None
+    review_notes: Optional[str] = None
+
+    detections: list[dict] = Field(default_factory=list)
+
+    harm_score: Optional[int] = None
+    severity_band: Optional[str] = None
+    harm_breakdown: Optional[dict] = None
+
+    model_version: Optional[str] = None
+    classified_at: Optional[datetime] = None
 
 class UserSignup(BaseModel):
     email: str

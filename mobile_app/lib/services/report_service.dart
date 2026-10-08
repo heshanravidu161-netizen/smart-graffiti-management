@@ -5,7 +5,10 @@ import 'package:http/http.dart' as http;
 import '../models/report.dart';
 
 class ReportService {
-  static const String baseUrl = 'https://urbaneyes-backend.onrender.com';
+  static const String baseUrl = String.fromEnvironment(
+    'API_BASE_URL',
+    defaultValue: 'https://urbaneyes-backend.onrender.com',
+  );
 
   Future<List<Report>> fetchReports({
     String? status,

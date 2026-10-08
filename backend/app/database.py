@@ -1,35 +1,67 @@
 """
-Database connection setup — SQLAlchemy engine + session, pointed at Supabase.
+Database connection setup for the UrbanEyes backend.
 
-The connection string comes from an environment variable, NOT hardcoded here.
-This is important: if this file ever gets committed to a public GitHub repo,
-you don't want the database password sitting in it in plain text.
+SQLAlchemy connects to the Supabase PostgreSQL database using the
+DATABASE_URL value stored in backend/.env.
 """
 
 import os
-from sqlalchemy import create_engine
-from sqlalchemy.orm import sessionmaker, declarative_base
+from pathlib import Path
 
-# Reads from environment variable DATABASE_URL.
-# Set this in a .env file locally (see .env.example), and as a real
-# environment variable wherever you deploy the backend (Railway/Render/Codespaces).
-DATABASE_URL = os.environ.get("DATABASE_URL")
+from dotenv import load_dotenv
+from sqlalchemy import create_engine
+from sqlalchemy.orm import declarative_base, sessionmaker
+
+
+# Find the backend directory:
+# smart-graffiti-scaffold/backend
+BACKEND_DIR = Path(__file__).resolve().parent.parent
+
+# Load variables from backend/.env.
+load_dotenv(BACKEND_DIR / ".env")
+
+
+# Read the Supabase PostgreSQL connection string.
+DATABASE_URL = os.getenv("DATABASE_URL")
 
 if not DATABASE_URL:
     raise RuntimeError(
-        "DATABASE_URL environment variable is not set. "
-        "Copy .env.example to .env and fill in your Supabase connection string."
+        "DATABASE_URL is not configured. "
+        "Add it to the backend/.env file."
     )
 
-engine = create_engine(DATABASE_URL, pool_pre_ping=True)
-SessionLocal = sessionmaker(autocommit=False, autoflush=False, bind=engine)
 
+# Create the SQLAlchemy database engine.
+#
+# pool_pre_ping checks that a connection is still active before using it.
+# This helps prevent errors caused by expired Supabase connections.
+engine = create_engine(
+    DATABASE_URL,
+    pool_pre_ping=True,
+)
+
+
+# Create database sessions for API requests.
+SessionLocal = sessionmaker(
+    autocommit=False,
+    autoflush=False,
+    bind=engine,
+)
+
+
+# Base class used by the SQLAlchemy database models.
 Base = declarative_base()
 
 
 def get_db():
-    """FastAPI dependency — gives each request its own DB session, closes it after."""
+    """
+    Provide a database session to a FastAPI endpoint.
+
+    The session is always closed after the request finishes.
+    """
+
     db = SessionLocal()
+
     try:
         yield db
     finally:

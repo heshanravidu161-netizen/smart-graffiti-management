@@ -3,14 +3,26 @@ Report API endpoints.
 
 These endpoints save and retrieve reports from the PostgreSQL
 database connected through Supabase.
+
+After a new report is saved, automatic AI classification starts as a
+background task. This allows the mobile application to receive the
+submission response without waiting for the AI models to finish.
 """
 
-from fastapi import APIRouter, Depends, HTTPException
+from fastapi import (
+    APIRouter,
+    BackgroundTasks,
+    Depends,
+    HTTPException,
+)
 from sqlalchemy.orm import Session
 
 from app.database import get_db
 from app.models.db_models import Report
 from app.models.schemas import ReportCreate, ReportOut
+from app.services.classification_workflow import (
+    classify_report_in_background,
+)
 
 
 router = APIRouter()
@@ -19,12 +31,19 @@ router = APIRouter()
 @router.post("/", response_model=ReportOut)
 def submit_report(
     report: ReportCreate,
+    background_tasks: BackgroundTasks,
     db: Session = Depends(get_db),
 ):
     """
     Create a new graffiti report.
 
-    The user's image is uploaded to Supabase Storage by the
+    The mobile application uploads the image to Supabase Storage
+    before sending its public image URL to this endpoint.
+
+    After the report is saved, the automatic AI classification
+    workflow starts in the background. The AI determines graffiti
+    presence, bounding boxes, confidence, approximate size, style,
+    offensive content and surface type.
     """
 
     new_report = Report(
@@ -40,9 +59,21 @@ def submit_report(
         status="new",
     )
 
-    db.add(new_report)
-    db.commit()
-    db.refresh(new_report)
+    try:
+        db.add(new_report)
+        db.commit()
+        db.refresh(new_report)
+
+    except Exception:
+        db.rollback()
+        raise
+
+    # Start AI classification after the report has been saved.
+    # The mobile application does not need to wait for the models.
+    background_tasks.add_task(
+        classify_report_in_background,
+        new_report.id,
+    )
 
     return new_report
 
@@ -53,22 +84,39 @@ def list_reports(
     db: Session = Depends(get_db),
 ):
     """
-    Return all reports for the council dashboard.
+    Return reports for the council dashboard.
 
-    A status can optionally be provided:
+    Reports can optionally be filtered by workflow status:
     new, scheduled or resolved.
     """
 
     query = db.query(Report)
 
     if status:
+        allowed_statuses = [
+            "new",
+            "scheduled",
+            "resolved",
+        ]
+
+        if status not in allowed_statuses:
+            raise HTTPException(
+                status_code=400,
+                detail=(
+                    "Status must be new, "
+                    "scheduled or resolved"
+                ),
+            )
+
         query = query.filter(
             Report.status == status,
         )
 
-    return query.order_by(
-        Report.submitted_at.desc(),
-    ).all()
+    return (
+        query
+        .order_by(Report.submitted_at.desc())
+        .all()
+    )
 
 
 @router.get("/{report_id}", response_model=ReportOut)
@@ -76,7 +124,7 @@ def get_report(
     report_id: int,
     db: Session = Depends(get_db),
 ):
-    """Return one report using its ID."""
+    """Return one report using its database ID."""
 
     report = (
         db.query(Report)
@@ -133,7 +181,12 @@ def update_report_status(
 
     report.status = status
 
-    db.commit()
-    db.refresh(report)
+    try:
+        db.commit()
+        db.refresh(report)
+
+    except Exception:
+        db.rollback()
+        raise
 
     return report

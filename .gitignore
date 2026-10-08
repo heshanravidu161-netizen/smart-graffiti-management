@@ -5,3 +5,30 @@ __pycache__/
 .DS_Store
 mobile_app/build/
 mobile_app/.dart_tool/
+.vercel
+.env*
+# Python and machine-learning environment
+ml_pipeline/.venv/
+ml_pipeline/__pycache__/
+ml_pipeline/scripts/__pycache__/
+
+# Roboflow dataset and cache files
+ml_pipeline/data/
+
+# Ignore all model-training runs
+ml_pipeline/models/*
+
+# Keep only the final best model
+!ml_pipeline/models/graffiti_detector/
+ml_pipeline/models/graffiti_detector/*
+!ml_pipeline/models/graffiti_detector/weights/
+ml_pipeline/models/graffiti_detector/weights/*
+!ml_pipeline/models/graffiti_detector/weights/best.pt
+# Local backup file
+.gitignore.backup
+
+# Downloaded pretrained YOLO model
+ml_pipeline/yolov8n.pt
+
+# Temporary YOLO output folder
+runs/
