@@ -21,6 +21,7 @@ The classification process runs automatically after report submission.
 Low-confidence results are marked for manual review.
 """
 
+import gc
 import os
 import random
 import tempfile
@@ -29,6 +30,7 @@ from urllib.parse import urlparse
 
 from PIL import Image
 import requests
+import torch
 from ultralytics import YOLO
 
 from app.services.harm_classifier import compute_harm_score
@@ -55,7 +57,7 @@ STYLE_MODEL_PATH = (
     PROJECT_ROOT
     / "ml_pipeline"
     / "models"
-    / "graffiti_style_classifier"
+    / "graffiti_style_balanced_test"
     / "weights"
     / "best.pt"
 )
@@ -116,25 +118,14 @@ SURFACE_REVIEW_THRESHOLD = 0.70
 
 
 # ---------------------------------------------------------
-# Model cache
+# Low-memory model loading
 # ---------------------------------------------------------
 
-# Models are loaded once and reused for later requests.
-_detection_model = None
-_style_model = None
-_offensive_model = None
-_surface_model = None
-
-
 def load_model(
-    current_model,
     model_path: Path,
     model_name: str,
 ) -> YOLO:
-    """Load a YOLO model after checking that it exists."""
-
-    if current_model is not None:
-        return current_model
+    """Load one YOLO model after checking that it exists."""
 
     if not model_path.exists():
         raise FileNotFoundError(
@@ -144,60 +135,71 @@ def load_model(
     return YOLO(str(model_path))
 
 
+def release_model(model=None) -> None:
+    """Release a model and return unused memory to the system."""
+
+    if model is not None:
+        try:
+            del model
+        except Exception:
+            pass
+
+    gc.collect()
+
+    if torch.cuda.is_available():
+        torch.cuda.empty_cache()
+
+    if hasattr(torch, "mps"):
+        try:
+            torch.mps.empty_cache()
+        except Exception:
+            pass
+
+    # On Render's Linux environment, ask the allocator to return
+    # unused heap memory to the operating system.
+    try:
+        import ctypes
+
+        libc = ctypes.CDLL("libc.so.6")
+        libc.malloc_trim(0)
+    except Exception:
+        pass
+
+
 def get_detection_model() -> YOLO:
-    """Load and return the graffiti-detection model."""
+    """Load a fresh graffiti-detection model."""
 
-    global _detection_model
-
-    _detection_model = load_model(
-        _detection_model,
+    return load_model(
         DETECTION_MODEL_PATH,
         "Graffiti detection model",
     )
 
-    return _detection_model
-
 
 def get_style_model() -> YOLO:
-    """Load and return the graffiti-style model."""
+    """Load a fresh graffiti-style model."""
 
-    global _style_model
-
-    _style_model = load_model(
-        _style_model,
+    return load_model(
         STYLE_MODEL_PATH,
         "Graffiti style model",
     )
 
-    return _style_model
-
 
 def get_offensive_model() -> YOLO:
-    """Load and return the offensive-content model."""
+    """Load a fresh offensive-content model."""
 
-    global _offensive_model
-
-    _offensive_model = load_model(
-        _offensive_model,
+    return load_model(
         OFFENSIVE_MODEL_PATH,
         "Offensive-content model",
     )
 
-    return _offensive_model
-
 
 def get_surface_model() -> YOLO:
-    """Load and return the surface-type model."""
+    """Load a fresh surface-type model."""
 
-    global _surface_model
-
-    _surface_model = load_model(
-        _surface_model,
+    return load_model(
         SURFACE_MODEL_PATH,
         "Surface-type model",
     )
-
-    return _surface_model
 
 
 # ---------------------------------------------------------
@@ -375,72 +377,67 @@ def detect_graffiti(
 
     model = get_detection_model()
 
-    results = model.predict(
-        source=local_image_path,
-        conf=DETECTION_CONFIDENCE_THRESHOLD,
-        verbose=False,
-    )
-
     detections = []
 
-    for result in results:
-        image_height, image_width = result.orig_shape
-        image_area = image_width * image_height
+    try:
+        results = model.predict(
+            source=local_image_path,
+            conf=DETECTION_CONFIDENCE_THRESHOLD,
+            verbose=False,
+        )
 
-        if result.boxes is None:
-            continue
+        for result in results:
+            image_height, image_width = result.orig_shape
+            image_area = image_width * image_height
 
-        for box in result.boxes:
-            x1, y1, x2, y2 = (
-                box.xyxy[0].tolist()
-            )
+            if result.boxes is None:
+                continue
 
-            box_width = max(
-                0.0,
-                x2 - x1,
-            )
+            for box in result.boxes:
+                x1, y1, x2, y2 = (
+                    box.xyxy[0].tolist()
+                )
 
-            box_height = max(
-                0.0,
-                y2 - y1,
-            )
+                box_width = max(0.0, x2 - x1)
+                box_height = max(0.0, y2 - y1)
+                box_area = box_width * box_height
 
-            box_area = box_width * box_height
+                area_fraction = (
+                    box_area / image_area
+                    if image_area > 0
+                    else 0.0
+                )
 
-            area_fraction = (
-                box_area / image_area
-                if image_area > 0
-                else 0.0
-            )
+                confidence = float(
+                    box.conf[0].item()
+                )
 
-            confidence = float(
-                box.conf[0].item()
-            )
+                detections.append(
+                    {
+                        "class_name": "graffiti",
+                        "confidence": round(confidence, 3),
+                        "size_category": bucket_size(
+                            area_fraction
+                        ),
+                        "area_fraction": round(
+                            area_fraction,
+                            4,
+                        ),
+                        "bbox": {
+                            "x1": round(x1, 1),
+                            "y1": round(y1, 1),
+                            "x2": round(x2, 1),
+                            "y2": round(y2, 1),
+                        },
+                        "image_width": image_width,
+                        "image_height": image_height,
+                    }
+                )
 
-            detections.append(
-                {
-                    "class_name": "graffiti",
-                    "confidence": round(
-                        confidence,
-                        3,
-                    ),
-                    "size_category": bucket_size(
-                        area_fraction
-                    ),
-                    "area_fraction": round(
-                        area_fraction,
-                        4,
-                    ),
-                    "bbox": {
-                        "x1": round(x1, 1),
-                        "y1": round(y1, 1),
-                        "x2": round(x2, 1),
-                        "y2": round(y2, 1),
-                    },
-                    "image_width": image_width,
-                    "image_height": image_height,
-                }
-            )
+        del results
+
+    finally:
+        release_model(model)
 
     return detections
 
@@ -455,44 +452,34 @@ def classify_with_model(
 ) -> dict:
     """Run a YOLO image-classification model."""
 
-    results = model.predict(
-        source=image,
-        verbose=False,
-    )
+    try:
+        results = model.predict(
+            source=image,
+            verbose=False,
+        )
 
-    if not results:
-        return {
-            "category": "unknown",
-            "confidence": 0.0,
-        }
+        if not results or results[0].probs is None:
+            prediction = {
+                "category": "unknown",
+                "confidence": 0.0,
+            }
+        else:
+            result = results[0]
+            predicted_index = int(result.probs.top1)
 
-    result = results[0]
+            prediction = {
+                "category": result.names[predicted_index],
+                "confidence": round(
+                    float(result.probs.top1conf.item()),
+                    3,
+                ),
+            }
 
-    if result.probs is None:
-        return {
-            "category": "unknown",
-            "confidence": 0.0,
-        }
+        del results
+        return prediction
 
-    predicted_index = int(
-        result.probs.top1
-    )
-
-    predicted_category = result.names[
-        predicted_index
-    ]
-
-    confidence = float(
-        result.probs.top1conf.item()
-    )
-
-    return {
-        "category": predicted_category,
-        "confidence": round(
-            confidence,
-            3,
-        ),
-    }
+    finally:
+        release_model(model)
 
 
 def classify_graffiti_style(
