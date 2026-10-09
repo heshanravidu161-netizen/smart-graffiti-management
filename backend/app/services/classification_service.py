@@ -57,7 +57,7 @@ STYLE_MODEL_PATH = (
     PROJECT_ROOT
     / "ml_pipeline"
     / "models"
-    / "graffiti_style_balanced_test"
+    / "graffiti_style_classifier_v2"
     / "weights"
     / "best.pt"
 )
@@ -546,7 +546,7 @@ def no_graffiti_result() -> dict:
         "severity_band": "None",
         "harm_breakdown": {},
         "model_version": (
-            "det-v1+style-v1+off-v2+surface-v2"
+            "det-v1+style-v2+off-v2+surface-v2"
         ),
     }
 
@@ -668,7 +668,7 @@ def classify_local_image(
     )
 
     best_detection["style_model_version"] = (
-        "style-v1"
+        "style-v2"
     )
 
     best_detection["offensive_category"] = (
@@ -758,7 +758,7 @@ def classify_local_image(
             harm_result["breakdown"]
         ),
         "model_version": (
-            "det-v1+style-v1+off-v2+surface-v2"
+            "det-v1+style-v2+off-v2+surface-v2"
         ),
     }
 
