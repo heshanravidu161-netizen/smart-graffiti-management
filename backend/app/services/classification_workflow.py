@@ -8,6 +8,7 @@ and saves the complete result.
 
 from datetime import timedelta
 from math import asin, cos, radians, sin, sqrt
+from threading import Lock
 
 from app.database import SessionLocal
 from app.models.db_models import Classification, Report
@@ -24,6 +25,12 @@ RECURRENCE_RADIUS_METRES = 50.0
 # Only reports submitted during this recent time window can be
 # counted as repeated occurrences.
 RECURRENCE_WINDOW_DAYS = 90
+
+
+# Only one AI classification may run at a time.
+# This prevents multiple YOLO models from being loaded
+# simultaneously on memory-limited hosting.
+classification_lock = Lock()
 
 
 def distance_in_metres(
@@ -401,7 +408,7 @@ def add_recurrence_result(
     return result
 
 
-def classify_report_in_background(
+def _classify_report_in_background_locked(
     report_id: int,
 ) -> None:
     """Automatically classify and save one report."""
@@ -534,3 +541,30 @@ def classify_report_in_background(
 
     finally:
         db.close()
+
+
+def classify_report_in_background(
+    report_id: int,
+) -> None:
+    """
+    Queue one automatic classification inside this process.
+
+    The lock prevents two reports from loading AI models at
+    the same time, which reduces peak memory use on Render.
+    """
+
+    print(
+        f"Report #{report_id} is waiting for "
+        "the AI classification lock."
+    )
+
+    with classification_lock:
+        print(
+            f"Report #{report_id} acquired "
+            "the AI classification lock."
+        )
+
+        _classify_report_in_background_locked(
+            report_id
+        )
+
