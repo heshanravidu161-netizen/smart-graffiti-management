@@ -6,7 +6,7 @@ Four trained AI models are used:
 1. Graffiti detector
    - Detects graffiti
    - Produces bounding boxes and confidence scores
-   - Estimates size using image coverage
+   - Uses tiled fallback detection for smaller graffiti
 
 2. Graffiti-style classifier
    - Predicts mural or tag
@@ -15,10 +15,10 @@ Four trained AI models are used:
    - Predicts offensive or not_offensive
 
 4. Surface-type classifier
-   - Predicts the surface shown in the complete photograph
+   - Uses an expanded graffiti-region crop
+   - Predicts the surface surrounding the graffiti
 
-The classification process runs automatically after report submission.
-Low-confidence results are marked for manual review.
+Low-confidence and tiled-fallback results are marked for manual review.
 """
 
 import gc
@@ -42,7 +42,6 @@ from app.services.harm_classifier import compute_harm_score
 
 PROJECT_ROOT = Path(__file__).resolve().parents[3]
 
-
 DETECTION_MODEL_PATH = (
     PROJECT_ROOT
     / "ml_pipeline"
@@ -51,7 +50,6 @@ DETECTION_MODEL_PATH = (
     / "weights"
     / "best.pt"
 )
-
 
 STYLE_MODEL_PATH = (
     PROJECT_ROOT
@@ -62,7 +60,6 @@ STYLE_MODEL_PATH = (
     / "best.pt"
 )
 
-
 OFFENSIVE_MODEL_PATH = (
     PROJECT_ROOT
     / "ml_pipeline"
@@ -71,7 +68,6 @@ OFFENSIVE_MODEL_PATH = (
     / "weights"
     / "best.pt"
 )
-
 
 SURFACE_MODEL_PATH = (
     PROJECT_ROOT
@@ -83,8 +79,6 @@ SURFACE_MODEL_PATH = (
 )
 
 
-# The surface classifier uses different category names from
-# the harm-scoring system. This mapping converts between them.
 SURFACE_SCORING_MAP = {
     "community_facility": "community_facility",
     "fence": "private_fence",
@@ -97,24 +91,27 @@ SURFACE_SCORING_MAP = {
 
 
 # ---------------------------------------------------------
-# Thresholds
+# Thresholds and settings
 # ---------------------------------------------------------
 
-# Approximate image-coverage thresholds.
-# These represent image coverage, not actual square metres.
+# Image coverage, not actual square metres.
 SMALL_THRESHOLD = 0.05
 MEDIUM_THRESHOLD = 0.20
 
-
-# Graffiti detection thresholds.
 DETECTION_CONFIDENCE_THRESHOLD = 0.25
 DETECTION_REVIEW_THRESHOLD = 0.50
 
-
-# Classification review thresholds.
 STYLE_REVIEW_THRESHOLD = 0.70
 OFFENSIVE_REVIEW_THRESHOLD = 0.85
 SURFACE_REVIEW_THRESHOLD = 0.70
+
+# Tiled detector settings.
+TILE_SIZE_FRACTION = 0.65
+DUPLICATE_OVERLAP_THRESHOLD = 0.45
+
+# The surface crop is expanded by 35% around each side of
+# the detected graffiti bounding box.
+SURFACE_CONTEXT_EXPANSION = 0.35
 
 
 # ---------------------------------------------------------
@@ -136,7 +133,7 @@ def load_model(
 
 
 def release_model(model=None) -> None:
-    """Release a model and return unused memory to the system."""
+    """Release a model and return unused memory."""
 
     if model is not None:
         try:
@@ -155,13 +152,12 @@ def release_model(model=None) -> None:
         except Exception:
             pass
 
-    # On Render's Linux environment, ask the allocator to return
-    # unused heap memory to the operating system.
     try:
         import ctypes
 
         libc = ctypes.CDLL("libc.so.6")
         libc.malloc_trim(0)
+
     except Exception:
         pass
 
@@ -222,7 +218,7 @@ def download_image(image_url: str) -> str:
     """
     Download a report image into a temporary file.
 
-    The caller must delete the temporary file after inference.
+    The caller must delete the returned temporary file.
     """
 
     parsed_url = urlparse(image_url)
@@ -273,7 +269,7 @@ def download_image(image_url: str) -> str:
         maximum_size = 20 * 1024 * 1024
 
         for chunk in response.iter_content(
-            chunk_size=8192
+            chunk_size=8192,
         ):
             if not chunk:
                 continue
@@ -306,7 +302,7 @@ def download_image(image_url: str) -> str:
 def load_full_image(
     local_image_path: str,
 ) -> Image.Image:
-    """Load the complete image for surface classification."""
+    """Load the complete image as RGB."""
 
     with Image.open(local_image_path) as source_image:
         image = source_image.convert("RGB")
@@ -318,7 +314,7 @@ def crop_detection(
     local_image_path: str,
     detection: dict,
 ) -> Image.Image:
-    """Crop one detected graffiti region from the image."""
+    """Crop one detected graffiti region."""
 
     bbox = detection["bbox"]
 
@@ -366,80 +362,468 @@ def crop_detection(
         return crop.copy()
 
 
+def crop_surface_context(
+    local_image_path: str,
+    detection: dict,
+    expansion_fraction: float = (
+        SURFACE_CONTEXT_EXPANSION
+    ),
+) -> Image.Image:
+    """
+    Crop the graffiti together with its surrounding surface.
+
+    The expanded crop gives the surface model enough local context
+    while reducing unrelated content elsewhere in the photograph.
+    """
+
+    bbox = detection["bbox"]
+
+    with Image.open(local_image_path) as source_image:
+        image = source_image.convert("RGB")
+
+        image_width, image_height = image.size
+
+        box_width = max(
+            1.0,
+            bbox["x2"] - bbox["x1"],
+        )
+
+        box_height = max(
+            1.0,
+            bbox["y2"] - bbox["y1"],
+        )
+
+        horizontal_expansion = (
+            box_width * expansion_fraction
+        )
+
+        vertical_expansion = (
+            box_height * expansion_fraction
+        )
+
+        x1 = max(
+            0,
+            int(
+                bbox["x1"]
+                - horizontal_expansion
+            ),
+        )
+
+        y1 = max(
+            0,
+            int(
+                bbox["y1"]
+                - vertical_expansion
+            ),
+        )
+
+        x2 = min(
+            image_width,
+            int(
+                bbox["x2"]
+                + horizontal_expansion
+            ),
+        )
+
+        y2 = min(
+            image_height,
+            int(
+                bbox["y2"]
+                + vertical_expansion
+            ),
+        )
+
+        x2 = max(x1 + 1, x2)
+        y2 = max(y1 + 1, y2)
+
+        surface_context = image.crop(
+            (x1, y1, x2, y2)
+        )
+
+        return surface_context.copy()
+
+
 # ---------------------------------------------------------
 # Graffiti detection
 # ---------------------------------------------------------
 
+def bounding_box_iou(
+    first_box: dict,
+    second_box: dict,
+) -> float:
+    """Calculate overlap between two bounding boxes."""
+
+    intersection_x1 = max(
+        first_box["x1"],
+        second_box["x1"],
+    )
+
+    intersection_y1 = max(
+        first_box["y1"],
+        second_box["y1"],
+    )
+
+    intersection_x2 = min(
+        first_box["x2"],
+        second_box["x2"],
+    )
+
+    intersection_y2 = min(
+        first_box["y2"],
+        second_box["y2"],
+    )
+
+    intersection_width = max(
+        0.0,
+        intersection_x2 - intersection_x1,
+    )
+
+    intersection_height = max(
+        0.0,
+        intersection_y2 - intersection_y1,
+    )
+
+    intersection_area = (
+        intersection_width
+        * intersection_height
+    )
+
+    first_width = max(
+        0.0,
+        first_box["x2"] - first_box["x1"],
+    )
+
+    first_height = max(
+        0.0,
+        first_box["y2"] - first_box["y1"],
+    )
+
+    second_width = max(
+        0.0,
+        second_box["x2"] - second_box["x1"],
+    )
+
+    second_height = max(
+        0.0,
+        second_box["y2"] - second_box["y1"],
+    )
+
+    first_area = first_width * first_height
+    second_area = second_width * second_height
+
+    union_area = (
+        first_area
+        + second_area
+        - intersection_area
+    )
+
+    if union_area <= 0:
+        return 0.0
+
+    return intersection_area / union_area
+
+
+def remove_duplicate_detections(
+    detections: list[dict],
+    overlap_threshold: float = (
+        DUPLICATE_OVERLAP_THRESHOLD
+    ),
+) -> list[dict]:
+    """
+    Remove repeated detections created by overlapping tiles.
+
+    The highest-confidence detection is retained.
+    """
+
+    sorted_detections = sorted(
+        detections,
+        key=lambda item: item["confidence"],
+        reverse=True,
+    )
+
+    accepted_detections = []
+
+    for detection in sorted_detections:
+        duplicate = any(
+            bounding_box_iou(
+                detection["bbox"],
+                accepted["bbox"],
+            ) >= overlap_threshold
+            for accepted in accepted_detections
+        )
+
+        if not duplicate:
+            accepted_detections.append(
+                detection
+            )
+
+    return accepted_detections
+
+
+def extract_detections(
+    results,
+    image_width: int,
+    image_height: int,
+    offset_x: int = 0,
+    offset_y: int = 0,
+    detection_method: str = "full_image",
+) -> list[dict]:
+    """
+    Convert YOLO results into complete-image coordinates.
+
+    Tile offsets are added when a prediction came from a cropped
+    section of the original image.
+    """
+
+    detections = []
+    image_area = image_width * image_height
+
+    for result in results:
+        if result.boxes is None:
+            continue
+
+        for box in result.boxes:
+            local_x1, local_y1, local_x2, local_y2 = (
+                box.xyxy[0].tolist()
+            )
+
+            x1 = max(
+                0.0,
+                min(
+                    local_x1 + offset_x,
+                    float(image_width),
+                ),
+            )
+
+            y1 = max(
+                0.0,
+                min(
+                    local_y1 + offset_y,
+                    float(image_height),
+                ),
+            )
+
+            x2 = max(
+                x1,
+                min(
+                    local_x2 + offset_x,
+                    float(image_width),
+                ),
+            )
+
+            y2 = max(
+                y1,
+                min(
+                    local_y2 + offset_y,
+                    float(image_height),
+                ),
+            )
+
+            box_width = max(
+                0.0,
+                x2 - x1,
+            )
+
+            box_height = max(
+                0.0,
+                y2 - y1,
+            )
+
+            box_area = box_width * box_height
+
+            area_fraction = (
+                box_area / image_area
+                if image_area > 0
+                else 0.0
+            )
+
+            confidence = float(
+                box.conf[0].item()
+            )
+
+            detections.append(
+                {
+                    "class_name": "graffiti",
+                    "confidence": round(
+                        confidence,
+                        3,
+                    ),
+                    "size_category": bucket_size(
+                        area_fraction
+                    ),
+                    "area_fraction": round(
+                        area_fraction,
+                        4,
+                    ),
+                    "bbox": {
+                        "x1": round(x1, 1),
+                        "y1": round(y1, 1),
+                        "x2": round(x2, 1),
+                        "y2": round(y2, 1),
+                    },
+                    "image_width": image_width,
+                    "image_height": image_height,
+                    "detection_method": (
+                        detection_method
+                    ),
+                }
+            )
+
+    return detections
+
+
 def detect_graffiti(
     local_image_path: str,
 ) -> list[dict]:
-    """Run the detector and return every graffiti detection."""
+    """
+    Detect graffiti using full-image and tiled inference.
+
+    Tiled inference runs only when the full-image attempt returns
+    no detections.
+    """
 
     model = get_detection_model()
-
-    detections = []
+    complete_image = None
 
     try:
+        complete_image = load_full_image(
+            local_image_path
+        )
+
+        image_width, image_height = (
+            complete_image.size
+        )
+
         results = model.predict(
-            source=local_image_path,
+            source=complete_image,
             conf=DETECTION_CONFIDENCE_THRESHOLD,
             verbose=False,
         )
 
-        for result in results:
-            image_height, image_width = result.orig_shape
-            image_area = image_width * image_height
-
-            if result.boxes is None:
-                continue
-
-            for box in result.boxes:
-                x1, y1, x2, y2 = (
-                    box.xyxy[0].tolist()
-                )
-
-                box_width = max(0.0, x2 - x1)
-                box_height = max(0.0, y2 - y1)
-                box_area = box_width * box_height
-
-                area_fraction = (
-                    box_area / image_area
-                    if image_area > 0
-                    else 0.0
-                )
-
-                confidence = float(
-                    box.conf[0].item()
-                )
-
-                detections.append(
-                    {
-                        "class_name": "graffiti",
-                        "confidence": round(confidence, 3),
-                        "size_category": bucket_size(
-                            area_fraction
-                        ),
-                        "area_fraction": round(
-                            area_fraction,
-                            4,
-                        ),
-                        "bbox": {
-                            "x1": round(x1, 1),
-                            "y1": round(y1, 1),
-                            "x2": round(x2, 1),
-                            "y2": round(y2, 1),
-                        },
-                        "image_width": image_width,
-                        "image_height": image_height,
-                    }
-                )
+        detections = extract_detections(
+            results=results,
+            image_width=image_width,
+            image_height=image_height,
+            detection_method="full_image",
+        )
 
         del results
 
-    finally:
-        release_model(model)
+        if detections:
+            return remove_duplicate_detections(
+                detections
+            )
 
-    return detections
+        print(
+            "No graffiti found in the complete image. "
+            "Running tiled fallback detection..."
+        )
+
+        tile_width = max(
+            1,
+            int(
+                image_width
+                * TILE_SIZE_FRACTION
+            ),
+        )
+
+        tile_height = max(
+            1,
+            int(
+                image_height
+                * TILE_SIZE_FRACTION
+            ),
+        )
+
+        x_positions = sorted(
+            {
+                0,
+                max(
+                    0,
+                    image_width - tile_width,
+                ),
+            }
+        )
+
+        y_positions = sorted(
+            {
+                0,
+                max(
+                    0,
+                    image_height - tile_height,
+                ),
+            }
+        )
+
+        tiled_detections = []
+
+        for offset_y in y_positions:
+            for offset_x in x_positions:
+                tile = complete_image.crop(
+                    (
+                        offset_x,
+                        offset_y,
+                        offset_x + tile_width,
+                        offset_y + tile_height,
+                    )
+                )
+
+                try:
+                    tile_results = model.predict(
+                        source=tile,
+                        conf=(
+                            DETECTION_CONFIDENCE_THRESHOLD
+                        ),
+                        verbose=False,
+                    )
+
+                    tile_detections = (
+                        extract_detections(
+                            results=tile_results,
+                            image_width=image_width,
+                            image_height=image_height,
+                            offset_x=offset_x,
+                            offset_y=offset_y,
+                            detection_method=(
+                                "tiled_fallback"
+                            ),
+                        )
+                    )
+
+                    tiled_detections.extend(
+                        tile_detections
+                    )
+
+                    del tile_results
+
+                finally:
+                    tile.close()
+
+        filtered_detections = (
+            remove_duplicate_detections(
+                tiled_detections
+            )
+        )
+
+        if filtered_detections:
+            print(
+                "Tiled fallback detected "
+                f"{len(filtered_detections)} "
+                "graffiti region(s)."
+            )
+
+        else:
+            print(
+                "Tiled fallback found no graffiti."
+            )
+
+        return filtered_detections
+
+    finally:
+        if complete_image is not None:
+            complete_image.close()
+
+        release_model(model)
 
 
 # ---------------------------------------------------------
@@ -463,19 +847,28 @@ def classify_with_model(
                 "category": "unknown",
                 "confidence": 0.0,
             }
+
         else:
             result = results[0]
-            predicted_index = int(result.probs.top1)
+
+            predicted_index = int(
+                result.probs.top1
+            )
 
             prediction = {
-                "category": result.names[predicted_index],
+                "category": (
+                    result.names[predicted_index]
+                ),
                 "confidence": round(
-                    float(result.probs.top1conf.item()),
+                    float(
+                        result.probs.top1conf.item()
+                    ),
                     3,
                 ),
             }
 
         del results
+
         return prediction
 
     finally:
@@ -485,7 +878,7 @@ def classify_with_model(
 def classify_graffiti_style(
     graffiti_crop: Image.Image,
 ) -> dict:
-    """Predict mural or tag from the graffiti crop."""
+    """Predict mural or tag."""
 
     return classify_with_model(
         get_style_model(),
@@ -505,18 +898,16 @@ def classify_offensive_content(
 
 
 def classify_surface_type(
-    complete_image: Image.Image,
+    surface_context_image: Image.Image,
 ) -> dict:
     """
-    Predict the surface type using the complete image.
-
-    The complete image is used because the model requires
-    the surrounding scene to identify the surface.
+    Predict the surface type using local context surrounding
+    the detected graffiti.
     """
 
     return classify_with_model(
         get_surface_model(),
-        complete_image,
+        surface_context_image,
     )
 
 
@@ -525,12 +916,7 @@ def classify_surface_type(
 # ---------------------------------------------------------
 
 def no_graffiti_result() -> dict:
-    """
-    Return a zero-score result when graffiti is not detected.
-
-    The report is sent for manual review because the detector
-    may have missed graffiti.
-    """
+    """Return a zero-score result when graffiti is not detected."""
 
     return {
         "id": random.randint(1000, 9999),
@@ -546,7 +932,7 @@ def no_graffiti_result() -> dict:
         "severity_band": "None",
         "harm_breakdown": {},
         "model_version": (
-            "det-v1+style-v2+off-v2+surface-v2"
+            "det-v1-tiled+style-v2+off-v2+surface-v2"
         ),
     }
 
@@ -577,13 +963,19 @@ def classify_local_image(
         best_detection["size_category"]
     )
 
+    detection_method = best_detection.get(
+        "detection_method",
+        "full_image",
+    )
+
     graffiti_crop = crop_detection(
         local_image_path,
         best_detection,
     )
 
-    complete_image = load_full_image(
-        local_image_path
+    surface_context_image = crop_surface_context(
+        local_image_path,
+        best_detection,
     )
 
     try:
@@ -598,12 +990,12 @@ def classify_local_image(
         )
 
         surface_result = classify_surface_type(
-            complete_image
+            surface_context_image
         )
 
     finally:
         graffiti_crop.close()
-        complete_image.close()
+        surface_context_image.close()
 
     style_category = (
         style_result["category"]
@@ -629,7 +1021,7 @@ def classify_local_image(
         surface_result["confidence"]
     )
 
-    # Keep the raw surface prediction for display.
+    # Retain the raw surface prediction for display.
     # Only confident predictions affect the harm score.
     surface_type_for_scoring = "unknown"
 
@@ -649,16 +1041,15 @@ def classify_local_image(
         harm_content_category = (
             "offensive_content"
         )
+
     else:
         harm_content_category = (
             style_category
         )
 
-    # Location classification is not trained yet.
+    # Location is added by classification_workflow.py.
     location_type = "unknown"
 
-    # Store the detailed model results inside the best
-    # detection so the dashboard can display them.
     best_detection["style_category"] = (
         style_category
     )
@@ -704,6 +1095,10 @@ def classify_local_image(
         >= SURFACE_REVIEW_THRESHOLD
     )
 
+    best_detection["surface_input_method"] = (
+        "expanded_graffiti_context"
+    )
+
     best_detection["surface_model_version"] = (
         "surface-v2"
     )
@@ -716,12 +1111,13 @@ def classify_local_image(
         occurrence_count=occurrence_count,
     )
 
-    # Any uncertain or offensive result is flagged for
-    # council review. Classification and scoring still finish.
     manual_review_required = any(
         [
             detection_confidence
             < DETECTION_REVIEW_THRESHOLD,
+
+            detection_method
+            == "tiled_fallback",
 
             style_confidence
             < STYLE_REVIEW_THRESHOLD,
@@ -758,7 +1154,7 @@ def classify_local_image(
             harm_result["breakdown"]
         ),
         "model_version": (
-            "det-v1+style-v2+off-v2+surface-v2"
+            "det-v1-tiled+style-v2+off-v2+surface-v2"
         ),
     }
 
