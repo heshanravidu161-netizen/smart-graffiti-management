@@ -1,6 +1,7 @@
 """
-Pydantic request/response models. These mirror database/schema.sql — keep them
-in sync as the schema evolves.
+Pydantic request/response models. 
+
+These show database/schema.sql
 """
 
 from pydantic import BaseModel, Field

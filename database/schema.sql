@@ -28,7 +28,7 @@ CREATE TABLE IF NOT EXISTS classifications (
     surface_type        VARCHAR(50),        -- e.g. 'brick_wall', 'metal_shutter', 'signage'
     tag_category         VARCHAR(50),        -- e.g. 'tag', 'stencil', 'mural', 'offensive_content'
     detection_confidence DOUBLE PRECISION,   -- 0.0–1.0, model's confidence in the detection
-    harm_score           INTEGER,            -- 1 (low) – 5 (high), from the harm classification framework
+    harm_score           INTEGER,             -- 1 (low) – 5 (high), from the harm classification framework
     model_version         VARCHAR(50),        -- which trained model produced this result
     classified_at         TIMESTAMP NOT NULL DEFAULT now()
 );
@@ -36,3 +36,6 @@ CREATE TABLE IF NOT EXISTS classifications (
 CREATE INDEX IF NOT EXISTS idx_reports_status ON reports(status);
 CREATE INDEX IF NOT EXISTS idx_reports_location ON reports(latitude, longitude);
 CREATE INDEX IF NOT EXISTS idx_classifications_report_id ON classifications(report_id);
+
+-- this is used in supbase 
+-- Ravindu

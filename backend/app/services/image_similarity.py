@@ -1,12 +1,14 @@
 """
 Visual similarity checking for graffiti reports.
 
-Two reports are treated as visually similar when their images have
-a sufficiently similar perceptual hash or enough matching OpenCV
-features. This is used together with GPS distance for recurrence.
+Two reports are treated as the same recurrence only when their
+downloaded image files have the same SHA-256 digest. Perceptual and
+OpenCV feature scores are retained as diagnostics, but they never
+create a recurrence by themselves.
 """
 
 from functools import lru_cache
+import hashlib
 
 import cv2
 import numpy as np
@@ -22,8 +24,8 @@ ORB_SIMILARITY_THRESHOLD = 0.08
 
 
 @lru_cache(maxsize=8)
-def download_image(image_url: str) -> np.ndarray:
-    """Download and decode an image as an OpenCV array."""
+def download_image_bytes(image_url: str) -> bytes:
+    """Download and validate the size of an image file."""
 
     response = requests.get(
         image_url,
@@ -37,8 +39,14 @@ def download_image(image_url: str) -> np.ndarray:
             "The comparison image exceeds 20 MB."
         )
 
+    return response.content
+
+
+def decode_image(image_bytes: bytes) -> np.ndarray:
+    """Decode downloaded image bytes as an OpenCV array."""
+
     image_array = np.frombuffer(
-        response.content,
+        image_bytes,
         dtype=np.uint8,
     )
 
@@ -193,18 +201,21 @@ def compare_images(
     """
     Compare two report images.
 
-    A positive result is still an experimental similarity
-    recommendation rather than guaranteed identity.
+    Only a byte-for-byte SHA-256 match is considered a duplicate.
     """
 
     try:
-        image_1 = prepare_grayscale(
-            download_image(image_url_1)
-        )
+        image_bytes_1 = download_image_bytes(image_url_1)
+        image_bytes_2 = download_image_bytes(image_url_2)
 
-        image_2 = prepare_grayscale(
-            download_image(image_url_2)
-        )
+        exact_match = hashlib.sha256(
+            image_bytes_1
+        ).digest() == hashlib.sha256(
+            image_bytes_2
+        ).digest()
+
+        image_1 = prepare_grayscale(decode_image(image_bytes_1))
+        image_2 = prepare_grayscale(decode_image(image_bytes_2))
 
         perceptual_similarity = hash_similarity(
             image_1,
@@ -229,12 +240,11 @@ def compare_images(
             >= ORB_SIMILARITY_THRESHOLD
         )
 
-        visually_similar = (
-            hash_match or feature_match
-        )
+        visually_similar = exact_match
 
         return {
             "visually_similar": bool(visually_similar),
+            "exact_match": bool(exact_match),
             "hash_similarity": float(
                 round(perceptual_similarity, 3)
             ),
@@ -243,21 +253,27 @@ def compare_images(
                 round(feature_similarity, 3)
             ),
             "reason": (
-                "Images passed the visual similarity check."
-                if visually_similar
-                else "Images did not pass the similarity thresholds."
+                "The downloaded image files are identical."
+                if exact_match
+                else (
+                    "The images may look similar, but their files are "
+                    "not identical and are treated as separate reports."
+                    if hash_match or feature_match
+                    else "The image files are not identical."
+                )
             ),
-            "version": "similarity-v1",
+            "version": "similarity-v2-exact",
         }
 
     except Exception as error:
         return {
             "visually_similar": False,
+            "exact_match": False,
             "hash_similarity": 0.0,
             "good_feature_matches": 0,
             "feature_similarity": 0.0,
             "reason": (
                 f"Image comparison failed: {error}"
             ),
-            "version": "similarity-v1",
+            "version": "similarity-v2-exact",
         }

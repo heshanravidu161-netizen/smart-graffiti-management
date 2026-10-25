@@ -3,8 +3,10 @@ import { createClient } from "@supabase/supabase-js";
 import {
   MapContainer,
   TileLayer,
+  Circle,
   CircleMarker,
   Popup,
+  useMap,
 } from "react-leaflet";
 import {
   Area,
@@ -40,6 +42,257 @@ const API_BASE =
 const DEFAULT_CENTER = [-31.9523, 115.8613];
 const AUSTRALIA_CENTER = [-25.2744, 133.7751];
 
+const HOTSPOT_RADIUS_METRES = 100;
+const HOTSPOT_WINDOW_DAYS = 90;
+const HOTSPOT_MINIMUM_REPORTS = 3;
+
+const OVERPASS_URLS = [
+  "https://overpass-api.de/api/interpreter",
+  "https://overpass.kumi.systems/api/interpreter",
+  "https://overpass.nchc.org.tw/api/interpreter",
+];
+const PERTH_HIGH_RISK_BBOX = "-32.200000,115.600000,-31.600000,116.100000";
+const DETAILED_AREA_ZOOM = 13;
+
+const PROTECTED_AREA_INFORMATION = {
+  heritage: { label: "Heritage site", colour: "#fbbf24", radius: 120 },
+  education: {
+    label: "School or education facility",
+    colour: "#38bdf8",
+    radius: 150,
+  },
+  healthcare: {
+    label: "Hospital or healthcare facility",
+    colour: "#fb7185",
+    radius: 150,
+  },
+  transport: { label: "Transport hub", colour: "#a78bfa", radius: 120 },
+  important_public_site: {
+    label: "Important public or community site",
+    colour: "#34d399",
+    radius: 120,
+  },
+};
+
+const EDUCATION_AMENITIES = new Set([
+  "school",
+  "kindergarten",
+  "college",
+  "university",
+]);
+const HEALTHCARE_AMENITIES = new Set(["hospital", "clinic", "doctors"]);
+const TRANSPORT_AMENITIES = new Set(["bus_station", "ferry_terminal"]);
+const IMPORTANT_PUBLIC_AMENITIES = new Set([
+  "townhall",
+  "courthouse",
+  "police",
+  "fire_station",
+  "community_centre",
+  "library",
+]);
+
+function getProtectedAreaCategory(tags = {}) {
+  const amenity = tags.amenity;
+
+  if (tags.historic || tags.heritage) return "heritage";
+  if (EDUCATION_AMENITIES.has(amenity)) return "education";
+  if (HEALTHCARE_AMENITIES.has(amenity)) return "healthcare";
+
+  if (
+    TRANSPORT_AMENITIES.has(amenity) ||
+    tags.railway === "station" ||
+    tags.public_transport === "station"
+  ) {
+    return "transport";
+  }
+
+  if (
+    IMPORTANT_PUBLIC_AMENITIES.has(amenity) ||
+    tags.office === "government" ||
+    tags.government
+  ) {
+    return "important_public_site";
+  }
+
+  return null;
+}
+
+function getProtectedAreaPosition(element) {
+  const latitude = Number(element.lat ?? element.center?.lat);
+  const longitude = Number(element.lon ?? element.center?.lon);
+
+  return Number.isFinite(latitude) && Number.isFinite(longitude)
+    ? [latitude, longitude]
+    : null;
+}
+
+function formatMapType(value) {
+  return String(value || "mapped site")
+    .replaceAll("_", " ")
+    .replace(/\b\w/g, (character) => character.toUpperCase());
+}
+
+async function requestProtectedAreas(query, signal) {
+  let lastError = null;
+
+  for (const endpoint of OVERPASS_URLS) {
+    try {
+      const response = await fetch(endpoint, {
+        method: "POST",
+        body: new URLSearchParams({ data: query }),
+        signal,
+      });
+
+      if (!response.ok) {
+        throw new Error(`OpenStreetMap request failed (${response.status}).`);
+      }
+
+      return await response.json();
+    } catch (error) {
+      if (error.name === "AbortError") throw error;
+      lastError = error;
+    }
+  }
+
+  throw lastError || new Error("No OpenStreetMap server was available.");
+}
+
+function HighRiskAreaOverlay() {
+  const map = useMap();
+  const [areas, setAreas] = useState([]);
+  const requestController = useRef(null);
+  const requestTimer = useRef(null);
+  const lastRequestArea = useRef(null);
+
+  useEffect(() => {
+    const loadVisibleAreas = () => {
+      window.clearTimeout(requestTimer.current);
+
+      requestTimer.current = window.setTimeout(async () => {
+        const detailedView = map.getZoom() >= DETAILED_AREA_ZOOM;
+        const bounds = map.getBounds();
+        const bbox = detailedView
+          ? [
+              bounds.getSouth(),
+              bounds.getWest(),
+              bounds.getNorth(),
+              bounds.getEast(),
+            ]
+              .map((value) => value.toFixed(6))
+              .join(",")
+          : PERTH_HIGH_RISK_BBOX;
+
+        if (lastRequestArea.current === bbox) return;
+        lastRequestArea.current = bbox;
+        const query = `
+          [out:json][timeout:35];
+          (
+            nwr["historic"](${bbox});
+            nwr["heritage"](${bbox});
+            nwr["amenity"~"^(school|kindergarten|college|university|hospital|clinic|doctors|townhall|courthouse|police|fire_station|community_centre|library|bus_station|ferry_terminal)$"](${bbox});
+            nwr["railway"="station"](${bbox});
+            nwr["public_transport"="station"](${bbox});
+            nwr["office"="government"](${bbox});
+            nwr["government"](${bbox});
+          );
+          out center tags;
+        `;
+
+        requestController.current?.abort();
+        const controller = new AbortController();
+        requestController.current = controller;
+
+        try {
+          const result = await requestProtectedAreas(
+            query,
+            controller.signal,
+          );
+          setAreas(
+            (result.elements || [])
+              .map((element) => {
+                const category = getProtectedAreaCategory(element.tags);
+                const position = getProtectedAreaPosition(element);
+                if (!category || !position) return null;
+
+                return {
+                  id: `${element.type}-${element.id}`,
+                  category,
+                  position,
+                  name:
+                    element.tags?.name ||
+                    PROTECTED_AREA_INFORMATION[category].label,
+                  mapType:
+                    element.tags?.amenity ||
+                    element.tags?.historic ||
+                    element.tags?.railway ||
+                    element.tags?.public_transport ||
+                    element.tags?.office ||
+                    "mapped site",
+                };
+              })
+              .filter(Boolean),
+          );
+        } catch (error) {
+          if (error.name !== "AbortError") {
+            console.warn("Unable to load high-risk map areas:", error);
+            setAreas([]);
+          }
+        }
+      }, 550);
+    };
+
+    loadVisibleAreas();
+    map.on("moveend", loadVisibleAreas);
+    map.on("zoomend", loadVisibleAreas);
+
+    return () => {
+      window.clearTimeout(requestTimer.current);
+      requestController.current?.abort();
+      map.off("moveend", loadVisibleAreas);
+      map.off("zoomend", loadVisibleAreas);
+    };
+  }, [map]);
+
+  return (
+    <>
+      {areas.map((area) => {
+          const information = PROTECTED_AREA_INFORMATION[area.category];
+
+          return (
+            <Circle
+              key={`protected-area-${area.id}`}
+              center={area.position}
+              radius={information.radius}
+              pathOptions={{
+                className: `protected-area protected-area-${area.category}`,
+                color: information.colour,
+                weight: 2,
+                fillColor: information.colour,
+                fillOpacity: 0.2,
+              }}
+            >
+              <Popup className="protected-area-popup">
+                <div className="protected-area-popup-content">
+                  <span
+                    className="protected-area-popup-dot"
+                    style={{ background: information.colour }}
+                  />
+                  <strong>{area.name}</strong>
+                  <p>{information.label}</p>
+                  <small>OpenStreetMap type: {formatMapType(area.mapType)}</small>
+                  <em>
+                    Reports here receive additional location-risk consideration
+                    in the classification workflow.
+                  </em>
+                </div>
+              </Popup>
+            </Circle>
+          );
+        })}
+    </>
+  );
+}
+
 const PRIORITY_COLOURS = {
   high: "#fb3d67",
   medium: "#f59e0b",
@@ -47,6 +300,131 @@ const PRIORITY_COLOURS = {
   pending: "#8b5cf6",
   not_applicable: "#64748b",
 };
+
+function distanceBetweenReports(firstReport, secondReport) {
+  const earthRadiusMetres = 6371000;
+  const toRadians = (degrees) => (degrees * Math.PI) / 180;
+
+  const firstLatitude = toRadians(Number(firstReport.latitude));
+  const secondLatitude = toRadians(Number(secondReport.latitude));
+  const latitudeDifference = secondLatitude - firstLatitude;
+  const longitudeDifference = toRadians(
+    Number(secondReport.longitude) - Number(firstReport.longitude),
+  );
+
+  const haversine =
+    Math.sin(latitudeDifference / 2) ** 2 +
+    Math.cos(firstLatitude) *
+      Math.cos(secondLatitude) *
+      Math.sin(longitudeDifference / 2) ** 2;
+
+  return (
+    earthRadiusMetres *
+    2 *
+    Math.atan2(Math.sqrt(haversine), Math.sqrt(1 - haversine))
+  );
+}
+
+function getHotspotLevel(reportCount) {
+  if (reportCount >= 8) {
+    return {
+      label: "Very high activity",
+      colour: "#ef4444",
+    };
+  }
+
+  if (reportCount >= 5) {
+    return {
+      label: "High activity",
+      colour: "#f97316",
+    };
+  }
+
+  return {
+    label: "Increased activity",
+    colour: "#facc15",
+  };
+}
+
+function buildActivityHotspots(reportList) {
+  const windowStart = new Date();
+  windowStart.setDate(windowStart.getDate() - HOTSPOT_WINDOW_DAYS);
+
+  const recentReports = reportList.filter((report) => {
+    const latitude = Number(report.latitude);
+    const longitude = Number(report.longitude);
+    const submittedDate = new Date(report.submitted_at);
+
+    return (
+      Number.isFinite(latitude) &&
+      Number.isFinite(longitude) &&
+      !Number.isNaN(submittedDate.getTime()) &&
+      submittedDate >= windowStart
+    );
+  });
+
+  const visitedReportIds = new Set();
+  const hotspots = [];
+
+  recentReports.forEach((startingReport) => {
+    if (visitedReportIds.has(startingReport.id)) {
+      return;
+    }
+
+    const cluster = [];
+    const pendingReports = [startingReport];
+    visitedReportIds.add(startingReport.id);
+
+    while (pendingReports.length > 0) {
+      const currentReport = pendingReports.shift();
+      cluster.push(currentReport);
+
+      recentReports.forEach((candidateReport) => {
+        if (visitedReportIds.has(candidateReport.id)) {
+          return;
+        }
+
+        if (
+          distanceBetweenReports(currentReport, candidateReport) <=
+          HOTSPOT_RADIUS_METRES
+        ) {
+          visitedReportIds.add(candidateReport.id);
+          pendingReports.push(candidateReport);
+        }
+      });
+    }
+
+    if (cluster.length < HOTSPOT_MINIMUM_REPORTS) {
+      return;
+    }
+
+    const latitude =
+      cluster.reduce(
+        (total, report) => total + Number(report.latitude),
+        0,
+      ) / cluster.length;
+
+    const longitude =
+      cluster.reduce(
+        (total, report) => total + Number(report.longitude),
+        0,
+      ) / cluster.length;
+
+    hotspots.push({
+      id: cluster
+        .map((report) => report.id)
+        .sort((firstId, secondId) => firstId - secondId)
+        .join("-"),
+      latitude,
+      longitude,
+      reportCount: cluster.length,
+      reportIds: cluster.map((report) => report.id),
+      ...getHotspotLevel(cluster.length),
+    });
+  });
+
+  return hotspots;
+}
 
 const STATUS_INFORMATION = {
   new: {
@@ -91,17 +469,12 @@ const PRIORITY_INFORMATION = {
 
 const REVIEW_OPTIONS = {
   surface_type: [
-    "private_fence",
-    "temporary_hoarding",
-    "commercial_shopfront",
-    "public_signage",
-    "heritage_building",
-    "public_monument",
     "community_facility",
     "fence",
     "shopfront",
     "wall_or_hoarding",
     "pavement_or_footpath",
+    "public_signage",
     "other",
     "unknown",
   ],
@@ -114,6 +487,7 @@ const REVIEW_OPTIONS = {
     "unknown",
   ],
   location_type: [
+    "heritage_or_important_site",
     "laneway",
     "rear_wall",
     "side_street",
@@ -191,6 +565,23 @@ function StatusBadge({ status }) {
   );
 }
 
+function escapeCsvValue(value) {
+  if (value === null || value === undefined) return "";
+
+  const text = String(value);
+
+  if (
+    text.includes(",") ||
+    text.includes('"') ||
+    text.includes("\n") ||
+    text.includes("\r")
+  ) {
+    return `"${text.replaceAll('"', '""')}"`;
+  }
+
+  return text;
+}
+
 function CouncilDashboard({ session, onSignOut }) {
   const [reports, setReports] = useState([]);
   const [selectedReport, setSelectedReport] = useState(null);
@@ -209,6 +600,7 @@ function CouncilDashboard({ session, onSignOut }) {
   const [priorityFilter, setPriorityFilter] = useState("all");
   const [view, setView] = useState("list");
   const [analyticsRange, setAnalyticsRange] = useState(30);
+  const [showHighRiskAreas, setShowHighRiskAreas] = useState(true);
 
   const [loading, setLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
@@ -684,6 +1076,114 @@ function CouncilDashboard({ session, onSignOut }) {
     search,
     sort,
   ]);
+
+  function exportFilteredReports() {
+    if (visibleReports.length === 0) {
+      setMessage("There are no filtered reports to export.");
+      return;
+    }
+
+    const headings = [
+      "Report ID",
+      "Status",
+      "Priority",
+      "Harm Score",
+      "Severity Band",
+      "Graffiti Detected",
+      "Surface Type",
+      "Graffiti Type",
+      "Offensive Content",
+      "Location Type",
+      "Size Category",
+      "Detection Confidence",
+      "Manual Review Required",
+      "Manually Reviewed",
+      "AI Surface Type",
+      "AI Graffiti Type",
+      "AI Location Type",
+      "AI Size Category",
+      "Reporter Name",
+      "Reporter Email",
+      "Reporter Phone",
+      "Latitude",
+      "Longitude",
+      "Submitted At",
+      "Classified At",
+      "Image URL",
+      "Notes",
+      "Model Version",
+    ];
+
+    const rows = visibleReports.map((report) => {
+      const reportClassification = classificationsByReport[report.id];
+      const firstDetection = reportClassification?.detections?.[0] || {};
+      const priority = getPriority(reportClassification);
+
+      return [
+        report.id,
+        report.status,
+        PRIORITY_INFORMATION[priority]?.label || priority,
+        reportClassification?.harm_score,
+        reportClassification?.severity_band,
+        reportClassification?.graffiti_detected,
+        reportClassification?.surface_type,
+        reportClassification?.tag_category,
+        firstDetection.offensive_content_detected,
+        reportClassification?.location_type,
+        reportClassification?.size_category,
+        reportClassification?.detection_confidence,
+        reportClassification?.manual_review_required,
+        reportClassification?.manually_reviewed,
+        reportClassification?.ai_surface_type,
+        reportClassification?.ai_tag_category,
+        reportClassification?.ai_location_type,
+        reportClassification?.ai_size_category,
+        report.reporter_name,
+        report.reporter_email,
+        report.reporter_phone,
+        report.latitude,
+        report.longitude,
+        report.submitted_at,
+        reportClassification?.classified_at,
+        report.image_url,
+        report.notes,
+        reportClassification?.model_version,
+      ];
+    });
+
+    const csv = [headings, ...rows]
+      .map((row) => row.map(escapeCsvValue).join(","))
+      .join("\n");
+    const blob = new Blob([`\uFEFF${csv}`], {
+      type: "text/csv;charset=utf-8",
+    });
+    const downloadUrl = URL.createObjectURL(blob);
+    const downloadLink = document.createElement("a");
+    const date = new Date().toISOString().slice(0, 10);
+
+    downloadLink.href = downloadUrl;
+    downloadLink.download = `urbaneyes-filtered-reports-${date}.csv`;
+    document.body.appendChild(downloadLink);
+    downloadLink.click();
+    downloadLink.remove();
+    URL.revokeObjectURL(downloadUrl);
+
+    setMessage(
+      `${visibleReports.length} filtered report${
+        visibleReports.length === 1 ? "" : "s"
+      } exported successfully.`,
+    );
+  }
+
+  const activityHotspots = useMemo(
+    () => buildActivityHotspots(reports),
+    [reports],
+  );
+
+  const visibleActivityHotspots = useMemo(
+    () => buildActivityHotspots(visibleReports),
+    [visibleReports],
+  );
 
   const priorityCounts = useMemo(() => {
     const counts = {
@@ -1276,6 +1776,35 @@ function CouncilDashboard({ session, onSignOut }) {
                 <strong>{reports.length} active data points</strong>
               </div>
 
+              <div className="protected-area-map-control">
+                <div className="protected-area-control-heading">
+                  <div>
+                    <strong>High-risk areas</strong>
+                    <span>{showHighRiskAreas ? "On" : "Off"}</span>
+                  </div>
+
+                  <label className="map-layer-switch">
+                    <input
+                      type="checkbox"
+                      checked={showHighRiskAreas}
+                      onChange={(event) =>
+                        setShowHighRiskAreas(event.target.checked)
+                      }
+                      aria-label="Show high-risk areas on the map"
+                    />
+                    <span className="map-layer-switch-track" aria-hidden="true">
+                      <span className="map-layer-switch-thumb" />
+                    </span>
+                  </label>
+                </div>
+
+                <small>
+                  {showHighRiskAreas
+                    ? "Heritage, education, healthcare, transport and important public sites are visible."
+                    : "Turn on to display protected and high-risk locations."}
+                </small>
+              </div>
+
               <MapContainer
                 className="australia-map"
                 center={AUSTRALIA_CENTER}
@@ -1288,6 +1817,31 @@ function CouncilDashboard({ session, onSignOut }) {
                   url="https://server.arcgisonline.com/ArcGIS/rest/services/World_Imagery/MapServer/tile/{z}/{y}/{x}"
                   attribution="Tiles &copy; Esri"
                 />
+
+                {showHighRiskAreas && <HighRiskAreaOverlay />}
+
+                {activityHotspots.map((hotspot) => (
+                  <CircleMarker
+                    key={`national-hotspot-${hotspot.id}`}
+                    center={[hotspot.latitude, hotspot.longitude]}
+                    radius={Math.min(26, 14 + hotspot.reportCount)}
+                    pathOptions={{
+                      className: "activity-hotspot-pulse",
+                      color: hotspot.colour,
+                      weight: 3,
+                      fillColor: hotspot.colour,
+                      fillOpacity: 0.24,
+                    }}
+                  >
+                    <Popup className="hotspot-popup">
+                      <strong>{hotspot.label}</strong>
+                      <br />
+                      {hotspot.reportCount} graffiti reports were submitted
+                      within this area during the last {HOTSPOT_WINDOW_DAYS}{" "}
+                      days.
+                    </Popup>
+                  </CircleMarker>
+                ))}
 
                 {reports.map((report) => {
                   const reportClassification =
@@ -1338,6 +1892,22 @@ function CouncilDashboard({ session, onSignOut }) {
                     {label}
                   </span>
                 ))}
+                <span className="hotspot-legend-item">
+                  <i className="hotspot-legend-ring" />
+                  Activity hotspot
+                </span>
+                {showHighRiskAreas &&
+                  Object.entries(PROTECTED_AREA_INFORMATION).map(
+                    ([category, information]) => (
+                      <span
+                        className="protected-area-legend-item"
+                        key={category}
+                      >
+                        <i style={{ background: information.colour }} />
+                        {information.label}
+                      </span>
+                    ),
+                  )}
               </div>
             </div>
 
@@ -1973,6 +2543,18 @@ function CouncilDashboard({ session, onSignOut }) {
                 <option value="priority">Highest priority</option>
               </select>
 
+              <button
+                className="export-reports-button"
+                type="button"
+                onClick={exportFilteredReports}
+                disabled={visibleReports.length === 0}
+                title="Export the currently filtered reports as CSV"
+              >
+                <span aria-hidden="true">⇩</span>
+                Export CSV
+                <strong>{visibleReports.length}</strong>
+              </button>
+
               <div className="view-switch">
                 <button
                   className={view === "list" ? "active" : ""}
@@ -2142,6 +2724,40 @@ function CouncilDashboard({ session, onSignOut }) {
                     attribution="Tiles &copy; Esri"
                   />
 
+                  {visibleActivityHotspots.map((hotspot) => (
+                    <Circle
+                      key={`hotspot-${hotspot.id}`}
+                      center={[hotspot.latitude, hotspot.longitude]}
+                      radius={HOTSPOT_RADIUS_METRES}
+                      pathOptions={{
+                        className: "activity-hotspot-pulse",
+                        color: hotspot.colour,
+                        weight: 3,
+                        fillColor: hotspot.colour,
+                        fillOpacity: 0.2,
+                      }}
+                    >
+                      <Popup className="hotspot-popup">
+                        <div className="hotspot-popup-content">
+                          <span
+                            className="hotspot-popup-dot"
+                            style={{ background: hotspot.colour }}
+                          />
+                          <strong>{hotspot.label}</strong>
+                          <p>
+                            {hotspot.reportCount} graffiti reports were
+                            submitted within approximately{" "}
+                            {HOTSPOT_RADIUS_METRES} metres during the last{" "}
+                            {HOTSPOT_WINDOW_DAYS} days.
+                          </p>
+                          <small>
+                            Reports: {hotspot.reportIds.join(", ")}
+                          </small>
+                        </div>
+                      </Popup>
+                    </Circle>
+                  ))}
+
                   {visibleReports.map((report) => (
                     <CircleMarker
                       key={report.id}
@@ -2201,6 +2817,10 @@ function CouncilDashboard({ session, onSignOut }) {
                       </span>
                     ),
                   )}
+                  <span className="hotspot-legend-item">
+                    <i className="hotspot-legend-ring" />
+                    Increased activity
+                  </span>
                 </div>
               </div>
             )}

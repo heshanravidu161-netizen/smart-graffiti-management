@@ -1,5 +1,6 @@
 """
-/auth endpoints — signup and login.
+/auth endpoints — signup and login part.
+
 """
 
 from fastapi import APIRouter, Depends, HTTPException

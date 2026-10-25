@@ -3,6 +3,9 @@ Database connection setup for the UrbanEyes backend.
 
 SQLAlchemy connects to the Supabase PostgreSQL database using the
 DATABASE_URL value stored in backend/.env.
+
+Supabase is on my user account (Ravindu) i have added every team member to the supabase project 
+
 """
 
 import os
@@ -66,3 +69,4 @@ def get_db():
         yield db
     finally:
         db.close()
+

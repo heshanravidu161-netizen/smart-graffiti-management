@@ -1118,6 +1118,99 @@ button {
   font-weight: 700;
 }
 
+.hotspot-popup .leaflet-popup-content-wrapper,
+.hotspot-popup .leaflet-popup-tip {
+  background: #111827;
+  color: #f8fafc;
+}
+
+.hotspot-popup .leaflet-popup-content {
+  margin: 14px 16px;
+  min-width: 220px;
+  line-height: 1.45;
+}
+
+.hotspot-popup-content strong {
+  color: #ffffff;
+  font-size: 14px;
+}
+
+.hotspot-popup-content p {
+  margin: 8px 0;
+  color: #dbeafe;
+  font-size: 12px;
+}
+
+.hotspot-popup-content small {
+  color: #94a3b8;
+  font-size: 10px;
+}
+
+.hotspot-popup-dot {
+  display: inline-block;
+  width: 9px;
+  height: 9px;
+  margin-right: 7px;
+  border-radius: 50%;
+  box-shadow: 0 0 10px currentColor;
+}
+
+.hotspot-legend-item {
+  white-space: nowrap;
+}
+
+.map-legend .hotspot-legend-ring,
+.national-map-legend .hotspot-legend-ring {
+  width: 12px;
+  height: 12px;
+  background: rgba(249, 115, 22, 0.22);
+  border: 2px solid #f97316;
+  border-radius: 50%;
+  animation: hotspot-legend-ping 1.8s ease-in-out infinite;
+}
+
+.leaflet-interactive.activity-hotspot-pulse {
+  transform-box: fill-box;
+  transform-origin: center;
+  animation: activity-hotspot-ping 1.8s ease-in-out infinite;
+}
+
+@keyframes activity-hotspot-ping {
+  0%,
+  100% {
+    transform: scale(1);
+    stroke-opacity: 1;
+    fill-opacity: 0.22;
+  }
+
+  50% {
+    transform: scale(1.14);
+    stroke-opacity: 0.55;
+    fill-opacity: 0.1;
+  }
+}
+
+@keyframes hotspot-legend-ping {
+  0%,
+  100% {
+    transform: scale(1);
+    box-shadow: 0 0 0 0 rgba(249, 115, 22, 0.45);
+  }
+
+  50% {
+    transform: scale(1.12);
+    box-shadow: 0 0 0 5px rgba(249, 115, 22, 0);
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .leaflet-interactive.activity-hotspot-pulse,
+  .map-legend .hotspot-legend-ring,
+  .national-map-legend .hotspot-legend-ring {
+    animation: none;
+  }
+}
+
 /* Report details drawer */
 
 .drawer-overlay {
@@ -1852,7 +1945,7 @@ body {
   content: "";
   position: absolute;
   inset: 0;
-  z-index: 410;
+  z-index: 0;
   pointer-events: none;
   box-shadow: inset 0 0 65px 20px rgba(7, 10, 16, 0.82);
 }
@@ -4168,6 +4261,58 @@ body {
 
 /* Harm score allocation chart */
 
+.activity-hotspot-warning {
+  display: flex;
+  align-items: flex-start;
+  gap: 14px;
+  width: 100%;
+  margin: 16px 0 20px;
+  padding: 16px;
+  border: 1px solid rgba(249, 115, 22, 0.48);
+  border-radius: 16px;
+  box-sizing: border-box;
+  color: #fb923c;
+  background: linear-gradient(135deg, rgba(249, 115, 22, 0.16), rgba(124, 45, 18, 0.08));
+}
+
+.activity-hotspot-warning-icon {
+  display: grid;
+  flex: 0 0 42px;
+  width: 42px;
+  height: 42px;
+  place-items: center;
+  border-radius: 50%;
+  color: #111827;
+  background: #fb923c;
+  font-size: 23px;
+  font-weight: 900;
+}
+
+.activity-hotspot-warning span,
+.activity-hotspot-warning strong {
+  display: block;
+}
+
+.activity-hotspot-warning span {
+  margin-bottom: 4px;
+  font-size: 10px;
+  font-weight: 800;
+  letter-spacing: 0.14em;
+}
+
+.activity-hotspot-warning strong {
+  color: #f8fafc;
+  font-size: 15px;
+}
+
+.activity-hotspot-warning p {
+  margin: 9px 0 0;
+  color: rgba(226, 232, 240, 0.82);
+  font-size: 13px;
+  line-height: 1.5;
+}
+
+
 .score-allocation-card {
   margin: 16px 0 20px;
   padding: 18px;
@@ -4313,3 +4458,154 @@ body {
     align-self: flex-start;
   }
 }
+.protected-area-map-control {
+  position: absolute;
+  z-index: 900;
+  top: 12px;
+  right: 12px;
+  display: grid;
+  gap: 4px;
+  min-width: 168px;
+  padding: 10px 12px;
+  border: 1px solid rgba(148, 163, 184, 0.32);
+  border-radius: 12px;
+  background: rgba(7, 15, 28, 0.9);
+  box-shadow: 0 10px 28px rgba(0, 0, 0, 0.3);
+  color: #f8fafc;
+  backdrop-filter: blur(12px);
+  pointer-events: auto;
+}
+
+.protected-area-control-heading {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 14px;
+}
+
+.protected-area-control-heading > div {
+  display: grid;
+  gap: 2px;
+}
+
+.protected-area-control-heading strong {
+  color: #f8fafc;
+  font-size: 0.78rem;
+  font-weight: 800;
+  letter-spacing: 0.02em;
+}
+
+.protected-area-control-heading > div > span {
+  color: #fbbf24;
+  font-size: 0.65rem;
+  font-weight: 800;
+  text-transform: uppercase;
+}
+
+.map-layer-switch {
+  position: relative;
+  display: inline-flex;
+  flex: 0 0 auto;
+  align-items: center;
+  margin: 0;
+  cursor: pointer;
+}
+
+.map-layer-switch input {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  opacity: 0;
+  pointer-events: none;
+}
+
+.map-layer-switch-track {
+  position: relative;
+  width: 42px;
+  height: 23px;
+  border: 1px solid rgba(148, 163, 184, 0.48);
+  border-radius: 999px;
+  background: rgba(100, 116, 139, 0.45);
+  transition: background 180ms ease, border-color 180ms ease;
+}
+
+.map-layer-switch-thumb {
+  position: absolute;
+  top: 3px;
+  left: 3px;
+  width: 15px;
+  height: 15px;
+  border-radius: 50%;
+  background: #ffffff;
+  box-shadow: 0 2px 7px rgba(0, 0, 0, 0.35);
+  transition: transform 180ms ease;
+}
+
+.map-layer-switch input:checked + .map-layer-switch-track {
+  border-color: #fbbf24;
+  background: #d97706;
+}
+
+.map-layer-switch input:checked + .map-layer-switch-track .map-layer-switch-thumb {
+  transform: translateX(19px);
+}
+
+.map-layer-switch input:focus-visible + .map-layer-switch-track {
+  outline: 3px solid rgba(56, 189, 248, 0.48);
+  outline-offset: 3px;
+}
+
+.protected-area-map-control small {
+  color: #a9b7ca;
+  font-size: 0.66rem;
+  line-height: 1.35;
+}
+
+.protected-area {
+  filter: drop-shadow(0 0 5px currentColor);
+}
+
+.protected-area-popup-content {
+  position: relative;
+  display: grid;
+  gap: 5px;
+  min-width: 210px;
+  padding-left: 17px;
+}
+
+.protected-area-popup-dot {
+  position: absolute;
+  top: 4px;
+  left: 0;
+  width: 9px;
+  height: 9px;
+  border-radius: 50%;
+}
+
+.protected-area-popup-content strong {
+  color: #0f172a;
+  font-size: 0.9rem;
+}
+
+.protected-area-popup-content p {
+  margin: 0;
+  color: #334155;
+  font-weight: 700;
+}
+
+.protected-area-popup-content small {
+  color: #64748b;
+}
+
+.protected-area-popup-content em {
+  margin-top: 3px;
+  color: #475569;
+  font-size: 0.72rem;
+  line-height: 1.35;
+}
+
+.protected-area-legend-item i {
+  border: 1px solid rgba(255, 255, 255, 0.76);
+  box-shadow: 0 0 8px currentColor;
+}
+

@@ -7,6 +7,8 @@ categories used by the harm-scoring framework.
 
 If the exact location returns an unclear feature such as
 building=yes, the classifier performs a wider street-level lookup.
+
+Based on Dr.Davids feedback location is used to identify high risk areas such as heritage sites
 """
 
 import time
@@ -80,6 +82,163 @@ TRANSPORT_TYPES = {
     "halt",
 }
 
+# OpenStreetMap feature types that normally identify a heritage,
+# protected or historically significant place.
+HERITAGE_CATEGORIES = {
+    "historic",
+}
+
+HERITAGE_TYPES = {
+    "archaeological_site",
+    "battlefield",
+    "castle",
+    "fort",
+    "heritage",
+    "manor",
+    "memorial",
+    "monument",
+    "ruins",
+    "wayside_cross",
+    "wayside_shrine",
+}
+
+# Important public buildings and facilities receive the same high
+# location score as schools, transport hubs and main streets.
+IMPORTANT_AMENITY_TYPES = {
+    "arts_centre",
+    "clinic",
+    "community_centre",
+    "courthouse",
+    "fire_station",
+    "hospital",
+    "library",
+    "place_of_worship",
+    "police",
+    "public_building",
+    "social_facility",
+    "townhall",
+}
+
+IMPORTANT_OFFICE_TYPES = {
+    "government",
+}
+
+IMPORTANT_TOURISM_TYPES = {
+    "gallery",
+    "museum",
+}
+
+PROTECTED_TYPES = {
+    "national_park",
+    "protected_area",
+}
+
+
+def get_extra_tags(
+    map_data: dict,
+) -> dict:
+    """Return lower-case OpenStreetMap extra tags safely."""
+
+    raw_extra_tags = map_data.get("extratags")
+
+    if not isinstance(raw_extra_tags, dict):
+        return {}
+
+    return {
+        str(key).lower(): str(value).lower()
+        for key, value in raw_extra_tags.items()
+        if value is not None
+    }
+
+
+def identify_significant_site(
+    map_data: dict,
+) -> tuple[str, str] | None:
+    """
+    Identify a heritage/protected site or important public building.
+
+    The returned tuple contains the significance type and a readable
+    explanation. None means that no reliable significance tag exists.
+    """
+
+    map_category = str(
+        map_data.get("category", "")
+    ).lower()
+
+    map_type = str(
+        map_data.get("type", "")
+    ).lower()
+
+    extra_tags = get_extra_tags(map_data)
+
+    has_heritage_tag = any(
+        extra_tags.get(key, "")
+        not in {"", "no", "false", "0"}
+        for key in (
+            "heritage",
+            "heritage:operator",
+            "historic",
+            "ref:heritage",
+            "ref:wa_heritage",
+        )
+    )
+
+    has_protection_tag = any(
+        extra_tags.get(key, "")
+        not in {"", "no", "false", "0"}
+        for key in (
+            "protect_class",
+            "protection_title",
+        )
+    )
+
+    if (
+        map_category in HERITAGE_CATEGORIES
+        or map_type in HERITAGE_TYPES
+        or has_heritage_tag
+    ):
+        return (
+            "heritage_site",
+            "OpenStreetMap identifies this location as a heritage "
+            "or historically significant site.",
+        )
+
+    if (
+        map_type in PROTECTED_TYPES
+        or has_protection_tag
+        or (
+            map_category == "boundary"
+            and map_type == "protected_area"
+        )
+    ):
+        return (
+            "protected_site",
+            "OpenStreetMap identifies this location as a protected "
+            "or nationally significant place.",
+        )
+
+    if (
+        (
+            map_category == "amenity"
+            and map_type in IMPORTANT_AMENITY_TYPES
+        )
+        or (
+            map_category == "office"
+            and map_type in IMPORTANT_OFFICE_TYPES
+        )
+        or (
+            map_category == "tourism"
+            and map_type in IMPORTANT_TOURISM_TYPES
+        )
+    ):
+        return (
+            "important_public_building",
+            "OpenStreetMap identifies this location as an important "
+            "public or community building.",
+        )
+
+    return None
+
 
 def unknown_location(
     reason: str,
@@ -113,6 +272,8 @@ def unknown_location(
         "version": "location-osm-v2",
         "lookup_zoom": lookup_zoom,
         "fallback_used": fallback_used,
+        "significant_site_detected": False,
+        "significance_type": None,
     }
 
 
@@ -181,8 +342,18 @@ def classify_map_feature(
     location_type = None
     confidence = 0.0
     reason = None
+    significance_type = None
 
-    if (
+    significant_site = identify_significant_site(
+        map_data
+    )
+
+    if significant_site is not None:
+        significance_type, reason = significant_site
+        location_type = "heritage_or_important_site"
+        confidence = 0.95
+
+    elif (
         map_category == "amenity"
         and map_type in SCHOOL_TYPES
     ):
@@ -265,6 +436,10 @@ def classify_map_feature(
         "version": "location-osm-v2",
         "lookup_zoom": lookup_zoom,
         "fallback_used": fallback_used,
+        "significant_site_detected": (
+            significance_type is not None
+        ),
+        "significance_type": significance_type,
     }
 
 

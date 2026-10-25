@@ -1,8 +1,11 @@
+import 'dart:convert';
 import 'dart:typed_data';
 
+import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_map/flutter_map.dart';
 import 'package:geolocator/geolocator.dart';
+import 'package:http/http.dart' as http;
 import 'package:image_picker/image_picker.dart';
 import 'package:latlong2/latlong.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
@@ -918,12 +921,24 @@ class MapPickerScreen extends StatefulWidget {
 }
 
 class _MapPickerScreenState extends State<MapPickerScreen> {
+  final MapController _mapController = MapController();
+  final TextEditingController _searchController = TextEditingController();
+
   late LatLng _selectedLocation;
+  List<_LocationSearchResult> _searchResults = [];
+  bool _searching = false;
+  String? _searchError;
 
   @override
   void initState() {
     super.initState();
     _selectedLocation = widget.initialLocation;
+  }
+
+  @override
+  void dispose() {
+    _searchController.dispose();
+    super.dispose();
   }
 
   void _selectLocation(TapPosition tapPosition, LatLng location) {
@@ -934,6 +949,144 @@ class _MapPickerScreenState extends State<MapPickerScreen> {
 
   void _confirmLocation() {
     Navigator.pop(context, _selectedLocation);
+  }
+
+  Future<void> _searchLocation() async {
+    final query = _searchController.text.trim();
+
+    FocusScope.of(context).unfocus();
+
+    if (query.length < 3) {
+      setState(() {
+        _searchError = 'Enter at least 3 characters.';
+        _searchResults = [];
+      });
+      return;
+    }
+
+    if (_searching) return;
+
+    setState(() {
+      _searching = true;
+      _searchError = null;
+      _searchResults = [];
+    });
+
+    try {
+      final uri = Uri.https(
+        'nominatim.openstreetmap.org',
+        '/search',
+        {
+          'q': query,
+          'format': 'jsonv2',
+          'addressdetails': '1',
+          'countrycodes': 'au',
+          'limit': '5',
+        },
+      );
+
+      final headers = <String, String>{
+        'Accept-Language': 'en-AU,en',
+      };
+
+      // Browsers set their own identifying headers. Native Flutter
+      // applications can supply the project identifier directly.
+      if (!kIsWeb) {
+        headers['User-Agent'] = 'UrbanEyes-Student-Project/2.0';
+      }
+
+      final response = await http
+          .get(
+            uri,
+            headers: headers,
+          )
+          .timeout(
+            const Duration(seconds: 15),
+          );
+
+      if (response.statusCode != 200) {
+        throw Exception(
+          'Map search returned status ${response.statusCode}.',
+        );
+      }
+
+      final decoded = jsonDecode(response.body);
+
+      if (decoded is! List) {
+        throw Exception('The map service returned an invalid response.');
+      }
+
+      final results = <_LocationSearchResult>[];
+
+      for (final item in decoded) {
+        if (item is! Map) continue;
+
+        final latitude = double.tryParse(
+          item['lat']?.toString() ?? '',
+        );
+
+        final longitude = double.tryParse(
+          item['lon']?.toString() ?? '',
+        );
+
+        final displayName = item['display_name']?.toString().trim();
+
+        if (latitude == null ||
+            longitude == null ||
+            displayName == null ||
+            displayName.isEmpty) {
+          continue;
+        }
+
+        results.add(
+          _LocationSearchResult(
+            displayName: displayName,
+            location: LatLng(latitude, longitude),
+          ),
+        );
+      }
+
+      if (!mounted) return;
+
+      setState(() {
+        _searchResults = results;
+
+        if (results.isEmpty) {
+          _searchError = 'No Australian locations were found.';
+        }
+      });
+    } catch (error) {
+      if (!mounted) return;
+
+      setState(() {
+        _searchError = 'Could not search for that location: $error';
+        _searchResults = [];
+      });
+    } finally {
+      if (mounted) {
+        setState(() {
+          _searching = false;
+        });
+      }
+    }
+  }
+
+  void _selectSearchResult(
+    _LocationSearchResult result,
+  ) {
+    setState(() {
+      _selectedLocation = result.location;
+      _searchController.text = result.displayName;
+      _searchResults = [];
+      _searchError = null;
+    });
+
+    _mapController.move(
+      result.location,
+      18,
+    );
+
+    FocusScope.of(context).unfocus();
   }
 
   @override
@@ -947,6 +1100,7 @@ class _MapPickerScreenState extends State<MapPickerScreen> {
       body: Stack(
         children: [
           FlutterMap(
+            mapController: _mapController,
             options: MapOptions(
               initialCenter: widget.initialLocation,
               initialZoom: 16,
@@ -977,6 +1131,153 @@ class _MapPickerScreenState extends State<MapPickerScreen> {
                 ],
               ),
             ],
+          ),
+          Positioned(
+            left: 16,
+            right: 16,
+            top: 16,
+            child: SafeArea(
+              bottom: false,
+              child: Column(
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  Material(
+                    elevation: 8,
+                    color: const Color(0xF2111114),
+                    borderRadius: BorderRadius.circular(16),
+                    child: Padding(
+                      padding: const EdgeInsets.all(8),
+                      child: Row(
+                        children: [
+                          Expanded(
+                            child: TextField(
+                              controller: _searchController,
+                              textInputAction: TextInputAction.search,
+                              onSubmitted: (_) => _searchLocation(),
+                              style: const TextStyle(
+                                color: Colors.white,
+                                fontSize: 14,
+                              ),
+                              decoration: InputDecoration(
+                                hintText: 'Search address or place',
+                                hintStyle: TextStyle(
+                                  color: Colors.white.withValues(alpha: 0.6),
+                                ),
+                                prefixIcon: const Icon(
+                                  Icons.search_rounded,
+                                  color: Colors.white70,
+                                ),
+                                filled: true,
+                                fillColor: Colors.white.withValues(alpha: 0.08),
+                                border: OutlineInputBorder(
+                                  borderRadius: BorderRadius.circular(12),
+                                  borderSide: BorderSide.none,
+                                ),
+                                contentPadding: const EdgeInsets.symmetric(
+                                  horizontal: 12,
+                                  vertical: 12,
+                                ),
+                              ),
+                            ),
+                          ),
+                          const SizedBox(width: 8),
+                          SizedBox(
+                            height: 48,
+                            child: ElevatedButton(
+                              onPressed: _searching ? null : _searchLocation,
+                              style: ElevatedButton.styleFrom(
+                                backgroundColor: const Color(0xFFA855F7),
+                                foregroundColor: Colors.white,
+                                shape: RoundedRectangleBorder(
+                                  borderRadius: BorderRadius.circular(12),
+                                ),
+                              ),
+                              child: _searching
+                                  ? const SizedBox(
+                                      width: 20,
+                                      height: 20,
+                                      child: CircularProgressIndicator(
+                                        strokeWidth: 2,
+                                        color: Colors.white,
+                                      ),
+                                    )
+                                  : const Text(
+                                      'Search',
+                                      style: TextStyle(
+                                        fontWeight: FontWeight.bold,
+                                      ),
+                                    ),
+                            ),
+                          ),
+                        ],
+                      ),
+                    ),
+                  ),
+                  if (_searchError != null)
+                    Container(
+                      width: double.infinity,
+                      margin: const EdgeInsets.only(top: 6),
+                      padding: const EdgeInsets.all(12),
+                      decoration: BoxDecoration(
+                        color: const Color(0xEE351421),
+                        borderRadius: BorderRadius.circular(12),
+                      ),
+                      child: Text(
+                        _searchError!,
+                        style: const TextStyle(
+                          color: Colors.white,
+                          fontSize: 13,
+                        ),
+                      ),
+                    ),
+                  if (_searchResults.isNotEmpty)
+                    Container(
+                      constraints: const BoxConstraints(maxHeight: 260),
+                      margin: const EdgeInsets.only(top: 6),
+                      decoration: BoxDecoration(
+                        color: const Color(0xF2111114),
+                        borderRadius: BorderRadius.circular(14),
+                        boxShadow: const [
+                          BoxShadow(
+                            color: Colors.black38,
+                            blurRadius: 12,
+                          ),
+                        ],
+                      ),
+                      child: ListView.separated(
+                        shrinkWrap: true,
+                        padding: EdgeInsets.zero,
+                        itemCount: _searchResults.length,
+                        separatorBuilder: (_, __) => Divider(
+                          height: 1,
+                          color: Colors.white.withValues(alpha: 0.12),
+                        ),
+                        itemBuilder: (context, index) {
+                          final result = _searchResults[index];
+
+                          return ListTile(
+                            leading: const Icon(
+                              Icons.location_on_outlined,
+                              color: Color(0xFFA855F7),
+                            ),
+                            title: Text(
+                              result.displayName,
+                              maxLines: 2,
+                              overflow: TextOverflow.ellipsis,
+                              style: const TextStyle(
+                                color: Colors.white,
+                                fontSize: 13,
+                                fontWeight: FontWeight.w600,
+                              ),
+                            ),
+                            onTap: () => _selectSearchResult(result),
+                          );
+                        },
+                      ),
+                    ),
+                ],
+              ),
+            ),
           ),
           Positioned(
             left: 16,
@@ -1032,4 +1333,14 @@ class _MapPickerScreenState extends State<MapPickerScreen> {
       ),
     );
   }
+}
+
+class _LocationSearchResult {
+  final String displayName;
+  final LatLng location;
+
+  const _LocationSearchResult({
+    required this.displayName,
+    required this.location,
+  });
 }

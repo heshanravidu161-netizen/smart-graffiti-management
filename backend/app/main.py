@@ -54,3 +54,4 @@ def health_check_db():
         return {"status": "database connected"}
     except Exception as e:
         return {"status": "database connection failed", "error": str(e)}
+

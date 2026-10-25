@@ -24,7 +24,7 @@ RECURRENCE_RADIUS_METRES = 50.0
 
 # Only reports submitted during this recent time window can be
 # counted as repeated occurrences.
-RECURRENCE_WINDOW_DAYS = 90
+RECURRENCE_WINDOW_DAYS = 90 
 
 
 # Only one AI classification may run at a time.
@@ -73,7 +73,7 @@ def empty_recurrence_details() -> dict:
     Return the default recurrence result.
 
     This result is used when graffiti was not detected or when no
-    visually similar nearby report was found.
+    identical nearby report image was found.
     """
 
     return {
@@ -83,7 +83,7 @@ def empty_recurrence_details() -> dict:
         "similar_report_count": 0,
         "matched_reports": [],
         "repeated_graffiti_detected": False,
-        "similarity_model_version": "similarity-v1",
+        "similarity_model_version": "similarity-v2-exact",
     }
 
 
@@ -92,7 +92,7 @@ def calculate_recurrence_details(
     current_report: Report,
 ) -> dict:
     """
-    Find visually similar earlier graffiti reports within 50 metres
+    Find identical earlier graffiti reports within 50 metres
     and the previous 90 days.
 
     A report is treated as a recurrence only when:
@@ -100,7 +100,7 @@ def calculate_recurrence_details(
     1. The earlier report is within 50 metres.
     2. It was submitted during the previous 90 days.
     3. Graffiti was detected in the earlier report.
-    4. The two report images pass the visual-similarity check.
+    4. The two downloaded image files have the same SHA-256 digest.
 
     Only two earlier matches are required because the harm framework
     uses its maximum recurrence score for three or more occurrences.
@@ -177,13 +177,13 @@ def calculate_recurrence_details(
             f"Similarity check: report "
             f"#{current_report.id} versus "
             f"report #{previous_report.id}: "
-            f"similar={comparison['visually_similar']}, "
+            f"exact={comparison.get('exact_match', False)}, "
             f"hash={comparison['hash_similarity']}, "
             f"features="
             f"{comparison['good_feature_matches']}."
         )
 
-        if comparison["visually_similar"]:
+        if comparison.get("exact_match", False):
             matched_reports.append(
                 {
                     "report_id": int(previous_report.id),
@@ -229,7 +229,7 @@ def calculate_recurrence_details(
         "repeated_graffiti_detected": (
             len(matched_reports) > 0
         ),
-        "similarity_model_version": "similarity-v1",
+        "similarity_model_version": "similarity-v2-exact",
     }
 
 
@@ -400,9 +400,9 @@ def add_recurrence_result(
             recurrence_details
         )
 
-    if "similarity-v1" not in result["model_version"]:
+    if "similarity-v2-exact" not in result["model_version"]:
         result["model_version"] += (
-            "+similarity-v1"
+            "+similarity-v2-exact"
         )
 
     return result

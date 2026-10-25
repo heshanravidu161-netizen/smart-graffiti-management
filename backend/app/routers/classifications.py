@@ -3,10 +3,13 @@ Classification endpoints.
 
 These endpoints run the complete AI-classification workflow, return
 the latest result and allow council staff to review uncertain
-predictions.
+predictions .
 
-Manual corrections recalculate the harm score while preserving the
-original AI-generated values.
+Manual corrections recalculate the harms score while keeping the
+original AI generated values.
+
+( )
+
 """
 
 from datetime import datetime
@@ -243,6 +246,7 @@ def classify_report(
     - Recurrence and visual-similarity checking
     - Harm-score calculation
     - Database saving
+    
     """
 
     report = (

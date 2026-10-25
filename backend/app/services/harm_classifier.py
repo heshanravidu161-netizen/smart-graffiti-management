@@ -4,6 +4,11 @@ Automatic graffiti harm-scoring framework.
 Five criteria are scored using values of 1, 3 or 5.
 Each value is multiplied by its proposal-defined weight.
 The weighted total is converted to a 1-15 harm score.
+
+Values are changed based on the feedback recived in the presentation by Dr.David 
+2026/10/19
+
+Change made - Given higher priority to heritage buildings and high risk areas such as schools/transport hubs etc.
 """
 
 
@@ -49,6 +54,7 @@ SURFACE_SCORES = {
 
 
 LOCATION_SCORES = {
+    "heritage_or_important_site": 5,
     "laneway": 1,
     "rear_wall": 1,
     "side_street": 3,
@@ -180,6 +186,15 @@ def compute_harm_score(
         1,
         min(15, harm_score),
     )
+
+    # Graffiti affecting a heritage, protected or important site
+    # must always receive at least High priority, regardless of
+    # the detected graffiti content, surface, size or recurrence.
+    if location_category == "heritage_or_important_site":
+        harm_score = max(
+            harm_score,
+            11,
+        )
 
     if harm_score <= 5:
         severity_band = "Low"

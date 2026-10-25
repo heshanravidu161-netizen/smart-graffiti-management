@@ -11,6 +11,7 @@ Four trained AI models are used:
 2. Graffiti-style classifier
    - Predicts mural or tag
 
+
 3. Offensive-content classifier
    - Predicts offensive or not_offensive
 
@@ -36,7 +37,7 @@ from ultralytics import YOLO
 from app.services.harm_classifier import compute_harm_score
 
 
-# ---------------------------------------------------------
+# --------------------------------------------------------
 # Project and model paths
 # ---------------------------------------------------------
 
@@ -92,7 +93,7 @@ SURFACE_SCORING_MAP = {
 
 # ---------------------------------------------------------
 # Thresholds and settings
-# ---------------------------------------------------------
+# --------------------------------------------------------
 
 # Image coverage, not actual square metres.
 SMALL_THRESHOLD = 0.05
